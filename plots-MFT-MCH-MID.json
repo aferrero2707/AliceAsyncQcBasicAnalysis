@@ -28,7 +28,7 @@
             "checkThreshold": 0.05,
             "maxBadBinsFrac": 0.05,
             "checkRangeMin": 0.5,
-            "checkRangeMax": 2.0,
+            "checkRangeMax": 1.5,
             "checkDeviationNsigma": 2.0,
             "drawOptions": "H",
             "logx": true,
