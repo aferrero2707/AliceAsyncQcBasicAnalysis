@@ -23,6 +23,47 @@ fi
 
 CONFIG="$1"
 
+# check if the configuration contains a combined runlist
+NPERIODS=$(jq ".periods | length" "$CONFIG")
+if [ x"${NPERIODS}" != "x0" ]; then
+    YEAR=$(jq ".year" "$CONFIG" | tr -d "\"")
+    PERIOD_COMBINED=$(jq ".period" "$CONFIG" | tr -d "\"")
+    PASS=$(jq ".pass" "$CONFIG" | tr -d "\"")
+
+    OUTBASEDIR="inputs/${YEAR}/${PERIOD_COMBINED}/${PASS}"
+    mkdir -p "${OUTBASEDIR}"
+
+    PERIODS=$(jq ".periods[]" "$CONFIG" | tr -d "\"")
+    UPDATE_OPT=""
+    if [ x"${UPDATE_CONFIG}" = "x1" ]; then
+        UPDATE_OPT="-u"
+    fi
+
+    FULLRUNLIST=""
+
+    for PERIOD in $PERIODS; do
+        PERIOD_CONFIG="runs-${PERIOD}-${PASS}.json"
+        if [ -e "${PERIOD_CONFIG}" ]; then
+            ./aqc-get-completed-runs.sh ${UPDATE_OPT} "${PERIOD_CONFIG}"
+            RUNLIST=$(jq ".runs[]" "${PERIOD_CONFIG}" | tr -d "\"" | head -c -1 | tr -s "\n" ",")
+            if [ ! -z "${FULLRUNLIST}" ]; then
+                FULLRUNLIST="${FULLRUNLIST},"
+            fi
+            echo "RUNLIST: $RUNLIST"
+            FULLRUNLIST="${FULLRUNLIST}${RUNLIST}"
+        fi
+    done
+
+    echo "FULL RUNLIST: ${FULLRUNLIST}"
+
+    jq -j --argjson array "[\"RUNLIST\"]" '.runs = $array' "$CONFIG" > temp.json && cp temp.json "$CONFIG" && rm temp.json
+
+    # use sed to inject the single-line runlists into the JSON configuration
+    cat "$CONFIG" | sed "s|\"RUNLIST\"|$FULLRUNLIST|" > temp.json && cp temp.json "$CONFIG" && rm temp.json
+
+    exit
+fi
+
 TYPE=$(jq ".type" "$CONFIG" | tr -d "\"")
 YEAR=$(jq ".year" "$CONFIG" | tr -d "\"")
 PERIOD=$(jq ".period" "$CONFIG" | tr -d "\"")

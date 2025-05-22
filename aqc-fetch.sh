@@ -18,6 +18,29 @@ fi
 
 CONFIG="$1"
 
+# check if the configuration contains a combined runlist
+NPERIODS=$(jq ".periods | length" "$CONFIG")
+if [ x"${NPERIODS}" != "x0" ]; then
+    YEAR=$(jq ".year" "$CONFIG" | tr -d "\"")
+    PERIOD_COMBINED=$(jq ".period" "$CONFIG" | tr -d "\"")
+    PASS=$(jq ".pass" "$CONFIG" | tr -d "\"")
+
+    OUTBASEDIR="inputs/${YEAR}/${PERIOD_COMBINED}/${PASS}"
+    mkdir -p "${OUTBASEDIR}"
+
+    PERIODS=$(jq ".periods[]" "$CONFIG" | tr -d "\"")
+
+    for PERIOD in $PERIODS; do
+        PERIOD_CONFIG="runs-${PERIOD}-${PASS}.json"
+        if [ -e "${PERIOD_CONFIG}" ]; then
+            ./aqc-fetch.sh "${PERIOD_CONFIG}"
+            (cd "${OUTBASEDIR}" && pwd && ln -s ../../$PERIOD/$PASS/??* .)
+        fi
+    done
+
+    exit
+fi
+
 YEAR=$(jq ".year" "$CONFIG" | tr -d "\"")
 PERIOD=$(jq ".period" "$CONFIG" | tr -d "\"")
 PASS=$(jq ".pass" "$CONFIG" | tr -d "\"")
@@ -58,6 +81,7 @@ do
         rm -f ./${OUTDIR}/QC-???.root
         OUTFILE="${OUTDIR}/QC_fullrun.root"
         echo "  \"${ROOTFILE}\" => \"${OUTFILE}\""
+        echo "alien.py cp ${ROOTFILE} file://./${OUTFILE}"
         alien.py cp ${ROOTFILE} file://./${OUTFILE}
 
     else
