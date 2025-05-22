@@ -1,0 +1,19 @@
+{
+  "year": "2023",
+  "period": "PbPb23",
+  "pass": "apass5",
+  "beamType": "Pb-Pb",
+  "periods": [
+    "LHC23zzf",
+    "LHC23zzg",
+    "LHC23zzh",
+    "LHC23zzi",
+    "LHC23zzk",
+    "LHC23zzl",
+    "LHC23zzm",
+    "LHC23zzn",
+    "LHC23zzo"
+  ],
+  "runs": [
+  ]
+}
