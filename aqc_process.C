@@ -700,21 +700,22 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     TH1* hist{ nullptr };
 
     // Convert TProfile plots into histograms to get correct errors for the ratios
+    std::string suffix = std::string("_for_average_") + std::to_string(index) + "_" + std::to_string(moIndex);
     if (dynamic_cast<TProfile*>(histTemp)) {
       TProfile* hp = dynamic_cast<TProfile*>(histTemp);
-      hist = hp->ProjectionX((std::string(histTemp->GetName()) + "_prof_px_for_average_" + std::to_string(moIndex)).c_str());
+      hist = hp->ProjectionX((std::string(histTemp->GetName()) + "_prof_px" + suffix).c_str());
     } else if (projection == "x") {
       TH2* h2 = dynamic_cast<TH2*>(histTemp);
       if (h2) {
-        hist = (TH1*)h2->ProjectionX((std::string(histTemp->GetName()) + "_px_for_average_" + std::to_string(moIndex)).c_str());
+        hist = (TH1*)h2->ProjectionX((std::string(histTemp->GetName()) + "_px" + suffix).c_str());
       }
     } else if (projection == "y") {
       TH2* h2 = dynamic_cast<TH2*>(histTemp);
       if (h2) {
-        hist = (TH1*)h2->ProjectionY((std::string(histTemp->GetName()) + "_py_for_average_" + std::to_string(moIndex)).c_str());
+        hist = (TH1*)h2->ProjectionY((std::string(histTemp->GetName()) + "_py" + suffix).c_str());
       }
     } else {
-      hist = (TH1*)histTemp->Clone((std::string(histTemp->GetName()) + "_clone_for_average_" + std::to_string(moIndex)).c_str());
+      hist = (TH1*)histTemp->Clone((std::string(histTemp->GetName()) + "_clone" + suffix).c_str());
     }
 
     histogramsWithFlag.push_back(std::make_pair<TH1*, bool>(nullptr, true));
@@ -877,29 +878,32 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     int lineColor = 51;
     bool first = true;
     int nBadPlots = 0;
+    int moIndex = 0;
     for (auto& mo : moVec) {
       TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
       //std::cout << "histTemp: " << histTemp << "  entries: " << histTemp->GetEntries() << std::endl;
       if (!histTemp) continue;
 
+      std::string suffix = std::string("_for_ratio_") + std::to_string(index) + "_" + std::to_string(moIndex);
       // Convert TProfile plots into histograms to get correct errors for the ratios
       if (dynamic_cast<TProfile*>(histTemp)) {
         TProfile* hp = dynamic_cast<TProfile*>(histTemp);
-        histTemp = hp->ProjectionX((std::string(histTemp->GetName()) + "_px").c_str());
+        histTemp = hp->ProjectionX((std::string(histTemp->GetName()) + "_profile_px" + suffix).c_str());
       }
 
       if (projection == "x") {
         TH2* h2 = dynamic_cast<TH2*>(histTemp);
         if (h2) {
-          histTemp = (TH1*)h2->ProjectionX();
+          histTemp = (TH1*)h2->ProjectionX((std::string(histTemp->GetName()) + "_px" + suffix).c_str());
         }
       }
       if (projection == "y") {
         TH2* h2 = dynamic_cast<TH2*>(histTemp);
         if (h2) {
-          histTemp = (TH1*)h2->ProjectionY();
+          histTemp = (TH1*)h2->ProjectionY((std::string(histTemp->GetName()) + "_py" + suffix).c_str());
         }
       }
+      moIndex += 1;
 
       canvas.padTop->cd();
 
