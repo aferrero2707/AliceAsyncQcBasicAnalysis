@@ -16,9 +16,9 @@
             "detector": "GLO",
             "task": "MUONTracks",
             "name": "MCH-MID/WithCuts/TrackPhi",
-            "checkThreshold": 0.1,
+            "checkThreshold": 0.05,
+            "maxBadBinsFrac": 0.01,
             "checkDeviationNsigma": 2.0,
-            "maxBadBinsFrac": 0.1,
             "drawOptions": "H"
         },
         {
