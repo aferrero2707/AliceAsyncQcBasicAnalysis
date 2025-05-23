@@ -124,7 +124,9 @@ double getRateForMO(std::shared_ptr<MonitorObject> mo) {
   }
 
   rate = (nPoints > 0) ? (rate / nPoints) : 0;
-  std::cout << "Rate for run " << runNumber << " and timestamp " << timestamp << " and source \"" << CTPScalerSourceName << "\" is " << rate << " kHz" << std::endl;
+  std::cout << "Rate for run " << runNumber << " and timestamp " << timestamp << " and source \"" << CTPScalerSourceName << "\" with nPoints=" << nPoints << " is " << rate << " kHz" << std::endl;
+
+  if (rate < 0) rate = 1;
 
   return rate;
 }
@@ -676,6 +678,134 @@ void normalizeHistogram(TH1* hist, double xmin, double xmax)
   hist->Scale(getNormalizationFactor(hist, xmin, xmax));
 }
 
+TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vector<std::shared_ptr<MonitorObject>>& monitorObjects, int index)
+{
+  double checkRangeMin = plotConfig.checkRangeMin;
+  double checkRangeMax = plotConfig.checkRangeMax;
+  double checkThreshold = plotConfig.checkThreshold;
+  double checkDeviationNsigma = plotConfig.checkDeviationNsigma;
+  double chekMaxBadBinsFrac = plotConfig.maxBadBinsFrac;
+  bool logx = plotConfig.logx;
+  bool logy = plotConfig.logy;
+  auto projection = plotConfig.projection;
+
+  // fill a vector of TH1 histograms with the associated quality flag
+  // histograms with quality=false are not included in the averaging
+  std::vector<std::pair<TH1*, bool>> histogramsWithFlag;
+  int moIndex = 0;
+  for (auto& mo : monitorObjects) {
+    TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
+    if (!histTemp) continue;
+
+    TH1* hist{ nullptr };
+
+    // Convert TProfile plots into histograms to get correct errors for the ratios
+    if (dynamic_cast<TProfile*>(histTemp)) {
+      TProfile* hp = dynamic_cast<TProfile*>(histTemp);
+      hist = hp->ProjectionX((std::string(histTemp->GetName()) + "_prof_px_for_average_" + std::to_string(moIndex)).c_str());
+    } else if (projection == "x") {
+      TH2* h2 = dynamic_cast<TH2*>(histTemp);
+      if (h2) {
+        hist = (TH1*)h2->ProjectionX((std::string(histTemp->GetName()) + "_px_for_average_" + std::to_string(moIndex)).c_str());
+      }
+    } else if (projection == "y") {
+      TH2* h2 = dynamic_cast<TH2*>(histTemp);
+      if (h2) {
+        hist = (TH1*)h2->ProjectionY((std::string(histTemp->GetName()) + "_py_for_average_" + std::to_string(moIndex)).c_str());
+      }
+    } else {
+      hist = (TH1*)histTemp->Clone((std::string(histTemp->GetName()) + "_clone_for_average_" + std::to_string(moIndex)).c_str());
+    }
+
+    histogramsWithFlag.push_back(std::make_pair<TH1*, bool>(nullptr, true));
+    histogramsWithFlag.back().first = hist;
+
+    moIndex += 1;
+  }
+
+  // Iteratively fill histogram with average of all histograms in the current IR interval
+  // The iterative averaging is stopped when the average does not contain any bad plot
+  TH1* averageHist{ nullptr };
+  while (true) {
+
+    if (averageHist) delete averageHist;
+    averageHist = nullptr;
+
+    for (auto [histTemp, flag] : histogramsWithFlag) {
+      if (!flag) continue;
+
+      if (!averageHist) {
+        averageHist = new TH1D(TString::Format("%s_%d_average", histTemp->GetName(), index),
+            histTemp->GetTitle(), histTemp->GetXaxis()->GetNbins(), histTemp->GetXaxis()->GetXmin(), histTemp->GetXaxis()->GetXmax());
+        averageHist->Add(histTemp);
+        normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+      } else {
+        averageHist->Add(histTemp, getNormalizationFactor(histTemp, checkRangeMin, checkRangeMax));
+      }
+    }
+    if (!averageHist) break;
+    normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+
+    // loop over plots and find, if existing, the Bad one with the worst quality score
+    double worstScore = 0;
+    int worstPlotIndex = -1;
+    for (size_t histIndex = 0; histIndex < histogramsWithFlag.size(); histIndex++) {
+      auto histTemp = histogramsWithFlag[histIndex].first;
+      bool flag = histogramsWithFlag[histIndex].second;
+      if (!flag) continue;
+
+      TH1* histRatio = (TH1*)histTemp->Clone("_ratio");
+      normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
+      histRatio->Divide(averageHist);
+
+      // check quality
+      double nBinsChecked = 0;
+      double nBinsBad = 0;
+      double score = 0; // score = sum of the deviations of all the bad bins
+      for (int bin = 1; bin <= histRatio->GetXaxis()->GetNbins(); bin++) {
+        double xBin = histRatio->GetXaxis()->GetBinCenter(bin);
+        if (checkRangeMin != checkRangeMax) {
+          if (xBin < checkRangeMin || xBin > checkRangeMax) {
+            continue;
+          }
+        }
+
+        nBinsChecked += 1;
+        double ratio = histRatio->GetBinContent(bin);
+        double error = histRatio->GetBinError(bin);
+        double deviation = std::fabs(ratio - 1.0);
+        double threshold = checkThreshold + error * checkDeviationNsigma;
+        if (deviation > threshold) {
+          nBinsBad += 1;
+          score += deviation;
+        }
+      }
+      double fracBad = (nBinsChecked > 0) ? (nBinsBad / nBinsChecked) : 0;
+
+      delete histRatio;
+
+      if (fracBad > chekMaxBadBinsFrac) {
+        if (score > worstScore) {
+          worstScore = score;
+          worstPlotIndex = histIndex;
+        }
+      }
+    }
+
+    if (worstPlotIndex >= 0) {
+      histogramsWithFlag[worstPlotIndex].second = false;
+    } else {
+      break;
+    }
+  }
+
+  for (auto [histTemp, flag] : histogramsWithFlag) {
+    delete histTemp;
+  }
+
+  return averageHist;
+}
+
 void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals)
 {
   double checkRangeMin = plotConfig.checkRangeMin;
@@ -731,35 +861,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     std::cout << "TOTO index: " << index << "  rate: " << referenceRate << "  referenceRun: " << refRunNumber << std::endl;
 
     // fill histogram with average of all histograms in the current IR interval
-    TH1* averageHist{ nullptr };
-    for (auto& mo : moVec) {
-      TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
-      if (!histTemp) continue;
-      // skip empty histograms for the averaging
-      if (histTemp->GetEntries() == 0) continue;
-
-      if (projection == "x") {
-        TH2* h2 = dynamic_cast<TH2*>(histTemp);
-        if (h2) {
-          histTemp = (TH1*)h2->ProjectionX();
-        }
-      }
-      if (projection == "y") {
-        TH2* h2 = dynamic_cast<TH2*>(histTemp);
-        if (h2) {
-          histTemp = (TH1*)h2->ProjectionY();
-        }
-      }
-
-      if (!averageHist) {
-        averageHist = new TH1D(TString::Format("%s_average", histTemp->GetName()), histTemp->GetTitle(),
-            histTemp->GetXaxis()->GetNbins(), histTemp->GetXaxis()->GetXmin(), histTemp->GetXaxis()->GetXmax());
-        averageHist->Add(histTemp);
-        normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
-      } else {
-        averageHist->Add(histTemp, getNormalizationFactor(histTemp, checkRangeMin, checkRangeMax));
-      }
-    }
+    TH1* averageHist = getAverageHistogramForRateInterval(plotConfig, moVec, index);
 
     // get pointer to the reference histogram, if available
     std::shared_ptr<TH1> referenceHist;
@@ -1434,7 +1536,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     CTPScalerSourceName = "ZNC-hadronic";
   } else if (beamType == "pp") {
     rateMax = 1000;
-    rateMin = 100;
+    rateMin = 1;
     rateDelta = 0.1;
     CTPScalerSourceName = "T0VTX";
   }
