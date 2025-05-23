@@ -57,6 +57,7 @@ struct PlotConfig
   double checkThreshold;
   double checkDeviationNsigma;
   double maxBadBinsFrac;
+  int rebin;
   bool normalize;
 };
 
@@ -688,6 +689,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
   bool logx = plotConfig.logx;
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
+  int rebin = plotConfig.rebin;
 
   // fill a vector of TH1 histograms with the associated quality flag
   // histograms with quality=false are not included in the averaging
@@ -804,6 +806,10 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     delete histTemp;
   }
 
+  if (averageHist && rebin > 1) {
+    averageHist->Rebin(rebin);
+  }
+
   return averageHist;
 }
 
@@ -817,6 +823,7 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   bool logx = plotConfig.logx;
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
+  int rebin = plotConfig.rebin;
 
   int cW = 1800;
   int cH = 1200;
@@ -920,6 +927,9 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       }
 
       TH1* hist = (TH1*)histTemp->Clone("_clone");
+      if (rebin > 1) {
+        hist->Rebin(rebin);
+      }
       normalizeHistogram(hist, checkRangeMin, checkRangeMax);
 
       hist->GetXaxis()->SetLabelSize(0);
@@ -955,6 +965,9 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
         }
 
         TH1* histRatio = (TH1*)histTemp->Clone("_ratio");
+        if (rebin > 1) {
+          histRatio->Rebin(rebin);
+        }
 
         TH1* histReference = (TH1*)denominatorHist->Clone("_clone");
         if (dynamic_cast<TProfile*>(histReference)) {
@@ -1440,6 +1453,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
                         config.value("checkThreshold", double(0.1)),
                         config.value("checkDeviationNsigma", double(2.0)),
                         config.value("maxBadBinsFrac", double(0.1)),
+                        config.value("rebin", 1),
                         config.value("normalize", true)
       });
     }
