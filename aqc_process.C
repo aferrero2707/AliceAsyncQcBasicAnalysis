@@ -82,11 +82,24 @@ struct Canvas
   std::shared_ptr<TPad> padRight;
 };
 
-std::string getPlotOutputFilePrefix(const PlotConfig& plotConfig)
+std::string getPlotOutputFilePath(const PlotConfig& plotConfig, int targetRun = 0)
 {
   std::string plotNameWithDashes = plotConfig.plotName;
   std::replace( plotNameWithDashes.begin(), plotNameWithDashes.end(), '/', '-');
-  std::string outputFileName = std::string("outputs/") + sessionID + "/" + year + "/" + period + "/" + pass + "/" + plotConfig.detectorName + "-" + plotConfig.taskName + "-" + plotNameWithDashes;
+
+  std::string outputPath = (targetRun == 0) ?
+      std::string("outputs/") + sessionID + "/" + year + "/" + period + "/" + pass + "/" :
+      std::string("outputs/") + sessionID + "/" + year + "/" + period + "/" + pass + "/" + std::to_string(targetRun) + "/";
+
+  return outputPath;
+}
+
+std::string getPlotOutputFilePrefix(const PlotConfig& plotConfig, int targetRun = 0)
+{
+  std::string plotNameWithDashes = plotConfig.plotName;
+  std::replace( plotNameWithDashes.begin(), plotNameWithDashes.end(), '/', '-');
+
+  std::string outputFileName = getPlotOutputFilePath(plotConfig, targetRun) + plotConfig.detectorName + "-" + plotConfig.taskName + "-" + plotNameWithDashes;
 
   if (!plotConfig.projection.empty()) {
     outputFileName += std::string("-proj") + plotConfig.projection;
@@ -679,7 +692,7 @@ void normalizeHistogram(TH1* hist, double xmin, double xmax)
   hist->Scale(getNormalizationFactor(hist, xmin, xmax));
 }
 
-TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vector<std::shared_ptr<MonitorObject>>& monitorObjects, int index)
+TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vector<std::shared_ptr<MonitorObject>>& monitorObjects, int index, int targetRun = 0)
 {
   double checkRangeMin = plotConfig.checkRangeMin;
   double checkRangeMax = plotConfig.checkRangeMax;
@@ -702,7 +715,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     TH1* hist{ nullptr };
 
     // Convert TProfile plots into histograms to get correct errors for the ratios
-    std::string suffix = std::string("_for_average_") + std::to_string(index) + "_" + std::to_string(moIndex);
+    std::string suffix = std::string("_for_average_") + std::to_string(index) + "_" + std::to_string(targetRun) + "_" + std::to_string(moIndex);
     if (dynamic_cast<TProfile*>(histTemp)) {
       TProfile* hp = dynamic_cast<TProfile*>(histTemp);
       hist = hp->ProjectionX((std::string(histTemp->GetName()) + "_prof_px" + suffix).c_str());
@@ -738,7 +751,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
       if (!flag) continue;
 
       if (!averageHist) {
-        averageHist = new TH1D(TString::Format("%s_%d_average", histTemp->GetName(), index),
+        averageHist = new TH1D(TString::Format("%s_average", histTemp->GetName()),
             histTemp->GetTitle(), histTemp->GetXaxis()->GetNbins(), histTemp->GetXaxis()->GetXmin(), histTemp->GetXaxis()->GetXmax());
         averageHist->Add(histTemp);
         normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
@@ -813,7 +826,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
   return averageHist;
 }
 
-void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals)
+std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals, int targetRun = 0)
 {
   double checkRangeMin = plotConfig.checkRangeMin;
   double checkRangeMax = plotConfig.checkRangeMax;
@@ -824,6 +837,8 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
   int rebin = plotConfig.rebin;
+
+  std::set<int> badRuns;
 
   int cW = 1800;
   int cH = 1200;
@@ -854,11 +869,27 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   canvas.canvas->cd();
   canvas.padRight->Draw();
 
-  std::string outputFileName = getPlotOutputFilePrefix(plotConfig) + ".pdf";
+  std::string outputFileName = getPlotOutputFilePrefix(plotConfig, targetRun) + ".pdf";
+  //std::cout << "Creating folder \"" << getPlotOutputFilePath(plotConfig, targetRun) << "\"" << std::endl;
+  gSystem->mkdir(getPlotOutputFilePath(plotConfig, targetRun).c_str(), kTRUE);
 
   bool firstPage = true;
   for (auto& [index, moVec] : monitorObjectsInRateIntervals) {
     if (moVec.empty()) continue;
+
+    bool hasPlotsInIndex = false;
+    if (targetRun == 0) {
+      hasPlotsInIndex = true;
+    } else {
+      for (auto& mo : moVec) {
+        if (mo->getActivity().mId == targetRun) {
+          hasPlotsInIndex = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasPlotsInIndex) continue;
 
     canvas.padTop->Clear();
     canvas.padBottom->Clear();
@@ -866,10 +897,10 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
 
     double referenceRate = rateIntervals[index].second;
     int refRunNumber = getReferenceRunForRate(referenceRate);
-    std::cout << "TOTO index: " << index << "  rate: " << referenceRate << "  referenceRun: " << refRunNumber << std::endl;
+    //std::cout << "TOTO index: " << index << "  rate: " << referenceRate << "  referenceRun: " << refRunNumber << std::endl;
 
     // fill histogram with average of all histograms in the current IR interval
-    TH1* averageHist = getAverageHistogramForRateInterval(plotConfig, moVec, index);
+    TH1* averageHist = getAverageHistogramForRateInterval(plotConfig, moVec, index, targetRun);
 
     // get pointer to the reference histogram, if available
     std::shared_ptr<TH1> referenceHist;
@@ -887,11 +918,15 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
     int nBadPlots = 0;
     int moIndex = 0;
     for (auto& mo : moVec) {
+      if (targetRun> 0 && mo->getActivity().mId != targetRun) {
+        continue;
+      }
+
       TH1* histTemp = dynamic_cast<TH1*>(mo->getObject());
       //std::cout << "histTemp: " << histTemp << "  entries: " << histTemp->GetEntries() << std::endl;
       if (!histTemp) continue;
 
-      std::string suffix = std::string("_for_ratio_") + std::to_string(index) + "_" + std::to_string(moIndex);
+      std::string suffix = std::string("_for_ratio_") + std::to_string(index) + "_" + std::to_string(moIndex) + "_" + std::to_string(targetRun);
       // Convert TProfile plots into histograms to get correct errors for the ratios
       if (dynamic_cast<TProfile*>(histTemp)) {
         TProfile* hp = dynamic_cast<TProfile*>(histTemp);
@@ -1073,14 +1108,16 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
       auto secondMax = getSecond(validityMax);
       */
       if (fracBad > chekMaxBadBinsFrac) {
-        std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
-            << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
-            << TString::Format(" - IR: [%0.1f kHz, %0.1f kHz]", rateIntervals[index].first, rateIntervals[index].second)
-            << std::endl;
+        //std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
+        //    << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
+        //    << TString::Format(" - IR: [%0.1f kHz, %0.1f kHz]", rateIntervals[index].first, rateIntervals[index].second)
+        //    << std::endl;
 
         badTimeIntervals[mo->getActivity().mId][plotConfig.plotName].insert(std::make_pair<long, long>(mo->getValidity().getMin(), mo->getValidity().getMax()));
 
         nBadPlots += 1;
+
+        badRuns.insert(mo->getActivity().mId);
       }
 
       if (mo->getActivity().mId == refRunNumber) {
@@ -1133,25 +1170,26 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
   canvas.canvas->Clear();
   canvas.canvas->SaveAs((outputFileName + ")").c_str());
 
-  std::cout << "\n\n==================\nDetailed report\n==================\n";
-  for (auto& [run, plotMap] : badTimeIntervals) {
-    if (plotMap.empty()) {
-      continue;
-    }
-    std::cout << "\nRun " << run << std::endl;
-    for (auto& [plotName, intervalVec] : plotMap) {
-      std::cout << "  Bad time intervals for plot \"" << plotName << "\"\n";
-      for (auto& [min, max] : intervalVec) {
-        TDatime daTime;
-        daTime.Set(min/1000);
-        int hourMin = daTime.GetHour();
-        int minuteMin = daTime.GetMinute();
-        int secondMin = daTime.GetSecond();
-        daTime.Set(max/1000);
-        int hourMax = daTime.GetHour();
-        int minuteMax = daTime.GetMinute();
-        int secondMax = daTime.GetSecond();
-        /*
+  if (targetRun == 0) {
+    std::cout << "\n\n==================\nDetailed report\n==================\n";
+    for (auto& [run, plotMap] : badTimeIntervals) {
+      if (plotMap.empty()) {
+        continue;
+      }
+      std::cout << "\nRun " << run << std::endl;
+      for (auto& [plotName, intervalVec] : plotMap) {
+        std::cout << "  Bad time intervals for plot \"" << plotName << "\"\n";
+        for (auto& [min, max] : intervalVec) {
+          TDatime daTime;
+          daTime.Set(min/1000);
+          int hourMin = daTime.GetHour();
+          int minuteMin = daTime.GetMinute();
+          int secondMin = daTime.GetSecond();
+          daTime.Set(max/1000);
+          int hourMax = daTime.GetHour();
+          int minuteMax = daTime.GetMinute();
+          int secondMax = daTime.GetSecond();
+          /*
         auto validityMin = getLocalTime(min, "Europe/Paris");
         auto hourMin = getHour(validityMin);
         auto minuteMin = getMinute(validityMin);
@@ -1160,11 +1198,14 @@ void plotAllRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vect
         auto hourMax = getHour(validityMax);
         auto minuteMax = getMinute(validityMax);
         auto secondMax = getSecond(validityMax);
-        */
-        std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+           */
+          std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+        }
       }
     }
   }
+
+  return badRuns;
 }
 
 void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<double, std::shared_ptr<MonitorObject>>>& monitorObjects)
@@ -1366,8 +1407,10 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   // input runs
   std::vector<int> inputRuns = jRunsConfig.at("runs");
   std::vector<int> runNumbers;
+  std::vector<int> runNumbersAll;
   for (const auto& inputRun : inputRuns) {
     runNumbers.push_back(inputRun);
+    runNumbersAll.push_back(inputRun);
   }
   /*auto inputRuns = ptRuns.get_child_optional("runs");
   if (inputRuns.has_value()) {
@@ -1385,7 +1428,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
       double rateMax = referenceRun.at("rateMax").get<double>();
       std::cout << std::format("reference run {} valid up to {} kHz\n", run, rateMax);
       referenceRunsMap[rateMax] = run;
-      runNumbers.push_back(run);
+      runNumbersAll.push_back(run);
     }
   } else {
     std::cout << "Key \"" << "referenceRuns" << "\" not found in configuration" << std::endl;
@@ -1407,7 +1450,7 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   // loading of ROOT files
   std::vector<std::string> rootFileNames;
   std::vector<std::shared_ptr<TFile>> rootFiles;
-  for (auto runNumber : runNumbers) {
+  for (auto runNumber : runNumbersAll) {
     std::cout << "  run " << runNumber << std::endl;
     std::string inputFilePath = std::string("inputs/") + year + "/" + period + "/" + pass + "/"
         + std::to_string(runNumber) + "/";
@@ -1580,7 +1623,12 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     //  plotRun(plot, runNumber, monitorObjectsInRateIntervals);
     //}
 
-    plotAllRunsWithRatios(plot, monitorObjectsInRateIntervals);
+    auto badRuns = plotRunsWithRatios(plot, monitorObjectsInRateIntervals);
+
+    for (auto runNumber : badRuns) {
+      std::cout << "Plotting bad run " << runNumber << std::endl;
+      plotRunsWithRatios(plot, monitorObjectsInRateIntervals, runNumber);
+    }
 
     //plotReferenceComparisonForAllRuns(plot, monitorObjectsInRateIntervals);
   }
