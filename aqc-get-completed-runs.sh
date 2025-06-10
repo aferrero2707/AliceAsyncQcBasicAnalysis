@@ -70,7 +70,27 @@ PERIOD=$(jq ".period" "$CONFIG" | tr -d "\"")
 PASS=$(jq ".pass" "$CONFIG" | tr -d "\"")
 
 RUNLIST=
-RUNLISTJSON=
+
+read_dom () {
+    local IFS="\>"
+    read -d \< ENTITY CONTENT
+    local ret=$?
+    TAG_NAME=${ENTITY%% *}
+    ATTRIBUTES=${ENTITY#* }
+    return $ret
+}
+
+get_ctime () {
+    if [[ $TAG_NAME = "file" ]] ; then
+        eval local $ATTRIBUTES
+        CTIME="$ctime"
+        #echo "get_ctime: $ctime"
+    fi
+}
+
+get_seconds () {
+    awk -v start="$1" 'BEGIN{split(start,d,"[- :]"); print mktime(d[1]" "d[2]" "d[3]" "d[4]" "d[5]" 0")}'
+}
 
 if [ x"$TYPE" = "xsim" ]; then
 
@@ -89,10 +109,8 @@ if [ x"$TYPE" = "xsim" ]; then
             #echo "Run $RUN found"
             if [ ${FIRST} -eq 0 ]; then
                 RUNLIST="${RUNLIST}, "
-                RUNLISTJSON="${RUNLISTJSON}, "
             fi
             RUNLIST="${RUNLIST}${RUN}"
-            RUNLISTJSON="${RUNLISTJSON}\"${RUN}\""
             FIRST=0
         fi
         
@@ -101,35 +119,80 @@ if [ x"$TYPE" = "xsim" ]; then
 else
 
     BASEDIR="/alice/${TYPE}/${YEAR}/${PERIOD}"
-    echo "--------------------"
+    echo ""
     echo "Getting completed runs from $BASEDIR/*/${PASS}"
     #echo "alien_find $BASEDIR \"*/$PASS/*/QC/QC_fullrun.root\""
-    echo "--------------------"
+    echo ""
+
+    PRODSTART=$(cat "$CONFIG" | jq -c '.productionStart' | tr -d '"')
+    PRODSTARTSEC=$(get_seconds "$PRODSTART")
+    #echo "PRODSTART: $PRODSTART"
+    #echo "PRODSTARTSEC: $PRODSTARTSEC"
+
+    MISSINGRUNLIST=
     
     FIRST=1
-    while IFS= read -r LINE
+    while IFS= read -r RUN
     do
         
-        #echo $LINE
-        RUN=$(echo "$LINE" | tr "/" "\n" | head -n 6 | tail -n 1)
-        #echo "Run $RUN found"
-        if [ ${FIRST} -eq 0 ]; then
-            RUNLIST="${RUNLIST}, "
-            RUNLISTJSON="${RUNLISTJSON}, "
-        fi
-        RUNLIST="${RUNLIST}${RUN}"
-        RUNLISTJSON="${RUNLISTJSON}\"${RUN}\""
-        FIRST=0
-        #echo "        \"$RUN\","
+        FOUND=0
         
-    done < <(alien_find $BASEDIR "*/$PASS/*/QC/QC_fullrun.root")
+        ROOTFILE=$(alien_find -x - "$BASEDIR/$RUN/$PASS" "*/QC/QC_fullrun.root")
+        #echo "ROOTFILE: $ROOTFILE"
+        if [ ! -z "$ROOTFILE" ]; then
+            #echo "Run $RUN found"
+            
+            CTIMESEC="0"
+            while read_dom; do
+                #echo "TAG_NAME: $TAG_NAME"
+                if [[ $TAG_NAME = "file" ]]; then
+                    #echo $ATTRIBUTES
+                    get_ctime
+                    #ctime=$(get_ctime)
+                    #echo "CTIME: $CTIME"
+                    CTIMESEC=$(get_seconds "$CTIME")
+                    break
+                fi
+            done < <(echo "$ROOTFILE" | sed 's|/>|>|g')         
+            IFS=
+
+            if [ $CTIMESEC -ge $PRODSTARTSEC ]; then
+                FOUND=1
+            else
+                echo "Run $RUN is too old"
+            fi
+        fi
+
+        if [ x"$FOUND" = "x1" ]; then
+            if [ ${FIRST} -eq 0 ]; then
+                RUNLIST="${RUNLIST}, "
+            fi
+            RUNLIST="${RUNLIST}${RUN}"
+            FIRST=0
+        else
+            if [ -n "${MISSINGRUNLIST}" ]; then
+                MISSINGRUNLIST="${MISSINGRUNLIST}, "
+            fi
+            MISSINGRUNLIST="${MISSINGRUNLIST}${RUN}"
+        fi
+        
+    done < <(cat "$CONFIG" | jq -c '.productionRuns' | tr -d '[' | tr -d ']' | sed 's|,|\n|g')
 
 fi
 
-echo ""; echo $RUNLIST  
+echo "============================="
+echo "List of runs missing in alien"
+echo "============================="
+echo ""; echo $MISSINGRUNLIST; echo ""
+
+
+echo "============================="
+echo "List of runs found in alien"
+echo "============================="
+echo ""; echo $RUNLIST; echo ""
+
 
 if [ x"${UPDATE_CONFIG}" = "x1" ]; then
-    #echo "$RUNLISTJSON"
     # save the .productionRuns key as a comma-separated single line
     PRODUCTIONRUNS=$(cat "$CONFIG" | jq -c '.productionRuns' | tr -d '[' | tr -d ']' | sed 's|,|, |g')
 
