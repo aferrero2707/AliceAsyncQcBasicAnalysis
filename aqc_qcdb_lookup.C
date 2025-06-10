@@ -96,8 +96,18 @@ void aqc_qcdb_lookup(const char* runsConfig)
   mDatabase.connect(mDatabaseUrl, "", "", "");
 
   std::vector<std::string> plotsToLookup{
+    dbPrexif + "/ITS/MO/Clusters/General/General_Occupancy",
     dbPrexif + "/ITS/MO/Tracks/EtaDistribution",
-    dbPrexif + "/TPC/MO/Tracks/hEta"
+    //dbPrexif + "/MCH/MO/Clusters/ClustersPerTrack",
+    //dbPrexif + "/MCH/MO/Tracks/WithCuts/TrackEta",
+    //dbPrexif + "/MFT/MO/Tracks/mMFTTrackEta_5_MinClusters",
+    //dbPrexif + "/MFT/MO/Clusters/mClustersROFSize",
+    //dbPrexif + "/MID/MO/Digits/BendHitsMap11",
+    //dbPrexif + "/MID/MO/Tracks/TrackBCCounts",
+    //dbPrexif + "/MID/MO/Tracks/TrackDetRatio44Map11",
+    dbPrexif + "/TPC/MO/Tracks/hEta",
+    dbPrexif + "/TPC/MO/PID/hdEdxTotMIP_TPC",
+    dbPrexif + "/GLO/MO/MatchTrITSTPC/mFractionITSTPCmatch_noEta0_ITS"
   };
 
 
