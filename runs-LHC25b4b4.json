@@ -1,0 +1,21 @@
+{
+  "type": "sim",
+  "year": "2025",
+  "period": "LHC25b4b4",
+  "pass": "0",
+  "beamType": "pp",
+  "enable_chunks": "0",
+  "rootFiles": [
+    "MCHTracksTaskQC.root",
+    "MIDTaskQC.root",
+    "MCHMIDTracksTaskQC.root",
+    "MUONTracksMFTTaskQC.root"
+  ],
+  "productionRuns": [
+    559408, 559409, 559410, 559423, 559437, 559443, 559444, 559456
+  ],
+  "productionStart": "2025-04-17 10:00:00",
+  "runs": [
+    559408, 559409, 559410, 559423, 559437, 559443, 559444, 559456
+  ]
+}
