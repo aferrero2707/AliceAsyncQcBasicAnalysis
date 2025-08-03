@@ -401,12 +401,9 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig,
 
     histRatio->SetLineColor(kBlack);
 
-    //histRatio->SetTitle(TString::Format("%s [%0.1f kHz, %0.1f kHz]", hist->GetTitle(), rateIntervals[index].first, rateIntervals[index].second));
     histRatio->Draw("H");
-    histRatio->SetMinimum(0.5 + 1.0e-3);
-    histRatio->SetMaximum(1.5 - 1.0e-3);
-    //histRatio->SetMinimum(0.8 + 1.0e-3);
-    //histRatio->SetMaximum(1.2 - 1.0e-3);
+    histRatio->SetMinimum(1.0 - checkThreshold * 3 + 1.0e-3);
+    histRatio->SetMaximum(1.0 + checkThreshold * 3 - 1.0e-3);
 
     // check quality
     double nBinsChecked = 0;
