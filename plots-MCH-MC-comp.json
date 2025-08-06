@@ -1,0 +1,56 @@
+{
+    "id": "MCH",
+    "plots": [
+        {
+            "detector": "MCH",
+            "task": "Clusters",
+            "name": "ClustersPerChamber",
+            "checkThreshold": 0.1,
+            "checkDeviationNsigma": 2.0,
+            "maxBadBinsFrac": 0.05,
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Clusters",
+            "name": "ClusterSizePerChamber",
+            "checkDeviationNsigma": 2.0,
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Tracks",
+            "name": "WithCuts/TrackEta",
+            "checkThreshold": 0.1,
+            "maxBadBinsFrac": 0.05,
+            "checkRangeMin": -3.99,
+            "checkRangeMax": -2.51,
+            "checkDeviationNsigma": 2.0,
+       	    "rebin": 2,
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Tracks",
+            "name": "WithCuts/TrackPhi",
+            "checkThreshold": 0.1,
+            "maxBadBinsFrac": 0.01,
+            "checkDeviationNsigma": 2.0,
+            "rebin": 2,
+            "drawOptions": "H"
+        },
+        {
+            "detector": "MCH",
+            "task": "Tracks",
+            "name": "WithCuts/TrackPt",
+            "checkThreshold": 0.1,
+            "maxBadBinsFrac": 0.1,
+            "checkRangeMin": 0.5,
+            "checkRangeMax": 1.5,
+            "checkDeviationNsigma": 2.0,
+            "drawOptions": "H",
+            "logx": true,
+            "logy": false
+        }
+    ]
+}
