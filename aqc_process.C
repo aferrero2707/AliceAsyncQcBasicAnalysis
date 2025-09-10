@@ -703,6 +703,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
   int rebin = plotConfig.rebin;
+  bool normalize = plotConfig.normalize;
 
   // fill a vector of TH1 histograms with the associated quality flag
   // histograms with quality=false are not included in the averaging
@@ -747,6 +748,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     if (averageHist) delete averageHist;
     averageHist = nullptr;
 
+    int nHistograms = 0;
     for (auto [histTemp, flag] : histogramsWithFlag) {
       if (!flag) continue;
 
@@ -754,13 +756,25 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
         averageHist = new TH1D(TString::Format("%s_average", histTemp->GetName()),
             histTemp->GetTitle(), histTemp->GetXaxis()->GetNbins(), histTemp->GetXaxis()->GetXmin(), histTemp->GetXaxis()->GetXmax());
         averageHist->Add(histTemp);
-        normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+        if (normalize) {
+          normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+        }
       } else {
-        averageHist->Add(histTemp, getNormalizationFactor(histTemp, checkRangeMin, checkRangeMax));
+        if (normalize) {
+          averageHist->Add(histTemp, getNormalizationFactor(histTemp, checkRangeMin, checkRangeMax));
+        } else {
+          averageHist->Add(histTemp);
+        }
       }
+      nHistograms += 1;
     }
     if (!averageHist) break;
-    normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+
+    if (normalize) {
+      normalizeHistogram(averageHist, checkRangeMin, checkRangeMax);
+    } else {
+      averageHist->Scale(1.0 / nHistograms);
+    }
 
     // loop over plots and find, if existing, the Bad one with the worst quality score
     double worstScore = 0;
@@ -771,7 +785,8 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
       if (!flag) continue;
 
       TH1* histRatio = (TH1*)histTemp->Clone("_ratio");
-      normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
+      if (normalize)
+        normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
       histRatio->Divide(averageHist);
 
       // check quality
@@ -808,6 +823,8 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
       }
     }
 
+    //break;
+
     if (worstPlotIndex >= 0) {
       histogramsWithFlag[worstPlotIndex].second = false;
     } else {
@@ -837,6 +854,7 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
   int rebin = plotConfig.rebin;
+  bool normalize = plotConfig.normalize;
 
   std::set<int> badRuns;
 
@@ -909,7 +927,10 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
     }
 
     TH1* denominatorHist = referenceHist ? referenceHist.get() : averageHist;
-    normalizeHistogram(denominatorHist, checkRangeMin, checkRangeMax);
+    std::cout << "referenceHist.get(): " << referenceHist.get() << "  averageHist: " << averageHist
+        << "  denominatorHist: " << denominatorHist << std::endl;
+    if (normalize)
+      normalizeHistogram(denominatorHist, checkRangeMin, checkRangeMax);
 
     auto legend = new TLegend(0.05,0.1,0.95,0.9);
 
@@ -962,10 +983,10 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
       }
 
       TH1* hist = (TH1*)histTemp->Clone("_clone");
-      if (rebin > 1) {
+      if (rebin > 1)
         hist->Rebin(rebin);
-      }
-      normalizeHistogram(hist, checkRangeMin, checkRangeMax);
+      if (normalize)
+        normalizeHistogram(hist, checkRangeMin, checkRangeMax);
 
       hist->GetXaxis()->SetLabelSize(0);
       hist->GetXaxis()->SetTitleSize(0);
@@ -1023,8 +1044,10 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
           }
         }
 
-        normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
-        normalizeHistogram(histReference, checkRangeMin, checkRangeMax);
+        if (normalize) {
+          normalizeHistogram(histRatio, checkRangeMin, checkRangeMax);
+          normalizeHistogram(histReference, checkRangeMin, checkRangeMax);
+        }
         histRatio->Divide(histReference);
         histRatio->SetTitle("");
         histRatio->SetTitleSize(0);
@@ -1592,13 +1615,13 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   double rateDelta = 0;
   if (beamType == "Pb-Pb") {
     rateMax = 50;
-    rateMin = 5;
+    rateMin = 1;
     rateDelta = 0.1;
     CTPScalerSourceName = "ZNC-hadronic";
   } else if (beamType == "pp") {
     rateMax = 1000;
     rateMin = 1;
-    rateDelta = 0.1;
+    rateDelta = 0.3;
     CTPScalerSourceName = "T0VTX";
   }
   double rate = rateMax;
