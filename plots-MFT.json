@@ -1,0 +1,14 @@
+{
+    "id": "MFT",
+    "plots": [
+        {
+            "detector": "MFT",
+            "task": "Tracks",
+            "name": "mMFTTrackPhi",
+            "checkThreshold": 0.1,
+            "checkDeviationNsigma": 2.0,
+            "maxBadBinsFrac": 0.05,
+            "drawOptions": "H"
+        }
+    ]
+}
