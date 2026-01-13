@@ -10,6 +10,7 @@
             "checkRangeMin": -3.99,
             "checkRangeMax": -2.51,
             "checkDeviationNsigma": 2.0,
+            "rebin": 5,
             "drawOptions": "H"
         },
         {
@@ -19,6 +20,7 @@
             "checkThreshold": 0.05,
             "maxBadBinsFrac": 0.01,
             "checkDeviationNsigma": 2.0,
+            "rebin": 5,
             "drawOptions": "H"
         },
         {
