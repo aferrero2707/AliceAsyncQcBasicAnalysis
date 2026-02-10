@@ -1,0 +1,16 @@
+{
+  "type": "data",
+  "year": "2025",
+  "period": "LHC25aq",
+  "pass": "apass1",
+  "beamType": "Pb-Pb",
+  "": "the beam type can be pp or Pb-Pb",
+  "enable_chunks": "0",
+  "productionRuns": [
+    568421, 568451, 568452, 568467, 568468, 568484, 568486, 568500, 568422
+  ],
+  "productionStart": "2026-01-01 12:00:00",
+  "runs": [
+  ],
+  "referenceRuns": []
+}
