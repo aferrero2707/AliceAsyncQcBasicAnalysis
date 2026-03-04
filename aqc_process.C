@@ -18,6 +18,12 @@
 #include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
+#define USE_ZONED_TIME 1
+
+#ifdef USE_ZONED_TIME
+#include <chrono>
+#endif
+
 using namespace o2::quality_control::core;
 
 std::string sessionID;
@@ -31,6 +37,8 @@ std::string CTPScalerSourceName{ "ZNC-hadronic" };
 
 std::map<int, std::shared_ptr<o2::ctp::CTPRateFetcher>> ctpRateFatchers;
 
+std::vector<int> runNumbers;
+std::vector<int> prodRunNumbers;
 std::vector<std::pair<double, double>> rateIntervals;
 
 //std::vector<std::pair<int, double>> referenceRunsMap{ {560034, 29}, {560033, 50} };
@@ -267,15 +275,17 @@ bool splitPlotPath(std::string plotPath, std::array<std::string, 4>& plotPathSpl
 
   return true;
 }
-/*
+
+#ifdef USE_ZONED_TIME
 using DateTime = std::pair<std::chrono::year_month_day, std::chrono::hh_mm_ss<std::chrono::milliseconds>>;
 
-DateTime getLocalTime(uint64_t timeStamp, const char* timeZone)
+DateTime getLocalTime(uint64_t timeStamp, const char* timeZone = "Europe/Paris")
+//DateTime getLocalTime(uint64_t timeStamp, const char* timeZone = "Asia/Tokyo")
 {
   DateTime result;
   auto localTime = std::chrono::zoned_time{timeZone, std::chrono::system_clock::time_point{std::chrono::milliseconds{timeStamp}}}.get_local_time();
-  result.first = std::chrono::year_month_day{floor<std::chrono::days>(localTime)};
-  result.second = std::chrono::hh_mm_ss{floor<std::chrono::milliseconds>(localTime - floor<std::chrono::days>(localTime))};
+  result.first = std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(localTime)};
+  result.second = std::chrono::hh_mm_ss{std::chrono::floor<std::chrono::milliseconds>(localTime - std::chrono::floor<std::chrono::days>(localTime))};
   return result;
 }
 
@@ -308,7 +318,8 @@ int getSecond(DateTime dateTime)
 {
   return dateTime.second.seconds().count();
 }
-*/
+#endif
+
 int getReferenceRunForRate(double rate)
 {
   int result = 0;
@@ -464,6 +475,14 @@ void plotRun(const PlotConfig& plotConfig, int runNumber, std::map<int, std::vec
       else hist->Draw("H same");
       nPlots += 1;
 
+#ifdef USE_ZONED_TIME
+      auto validityMin = getLocalTime(mo->getValidity().getMin());
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax());
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+#else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
       int hourMin = daTime.GetHour();
@@ -471,16 +490,7 @@ void plotRun(const PlotConfig& plotConfig, int runNumber, std::map<int, std::vec
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
-      /*
-      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto secondMin = getSecond(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-      auto secondMax = getSecond(validityMax);
-      */
+#endif
       legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
     }
 
@@ -534,6 +544,14 @@ void plotAllRuns(const PlotConfig& plotConfig, std::map<int, std::vector<std::sh
       else hist->Draw((plotConfig.drawOptions + " same").c_str());
       first = false;
 
+#ifdef USE_ZONED_TIME
+      auto validityMin = getLocalTime(mo->getValidity().getMin());
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax());
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+#else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
       int hourMin = daTime.GetHour();
@@ -541,14 +559,7 @@ void plotAllRuns(const PlotConfig& plotConfig, std::map<int, std::vector<std::sh
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
-      /*
-      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-      */
+#endif
       legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
     }
     legend->Draw();
@@ -636,6 +647,14 @@ void plotReferenceComparisonForAllRuns(const PlotConfig& plotConfig, std::map<in
       }
       double fracBad = (nBinsChecked > 0) ? (nBinsBad / nBinsChecked) : 0;
 
+#ifdef USE_ZONED_TIME
+      auto validityMin = getLocalTime(mo->getValidity().getMin());
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax());
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+#else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
       int hourMin = daTime.GetHour();
@@ -643,14 +662,7 @@ void plotReferenceComparisonForAllRuns(const PlotConfig& plotConfig, std::map<in
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
-      /*
-      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-      */
+#endif
       if (fracBad > chekMaxBadBinsFrac) {
         std::cout << "Bad run: " << TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax).Data() << std::endl;
       }
@@ -1111,25 +1123,26 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
 
       first = false;
 
+#ifdef USE_ZONED_TIME
+      auto validityMin = getLocalTime(mo->getValidity().getMin());
+      auto hourMin = getHour(validityMin);
+      auto minuteMin = getMinute(validityMin);
+      //auto secondMin = getSecond(validityMin);
+      auto validityMax = getLocalTime(mo->getValidity().getMax());
+      auto hourMax = getHour(validityMax);
+      auto minuteMax = getMinute(validityMax);
+      //auto secondMax = getSecond(validityMax);
+#else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
       int hourMin = daTime.GetHour();
       int minuteMin = daTime.GetMinute();
-      int secondMin = daTime.GetSecond();
+      //int secondMin = daTime.GetSecond();
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
-      int secondMax = daTime.GetSecond();
-      /*
-      auto validityMin = getLocalTime(mo->getValidity().getMin(), "Europe/Paris");
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto secondMin = getSecond(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax(), "Europe/Paris");
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-      auto secondMax = getSecond(validityMax);
-      */
+      //int secondMax = daTime.GetSecond();
+#endif
       if (fracBad > chekMaxBadBinsFrac) {
         //std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
         //    << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
@@ -1203,6 +1216,16 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
       for (auto& [plotName, intervalVec] : plotMap) {
         std::cout << "  Bad time intervals for plot \"" << plotName << "\"\n";
         for (auto& [min, max] : intervalVec) {
+#ifdef USE_ZONED_TIME
+          auto validityMin = getLocalTime(min);
+          auto hourMin = getHour(validityMin);
+          auto minuteMin = getMinute(validityMin);
+          auto secondMin = getSecond(validityMin);
+          auto validityMax = getLocalTime(max);
+          auto hourMax = getHour(validityMax);
+          auto minuteMax = getMinute(validityMax);
+          auto secondMax = getSecond(validityMax);
+#else
           TDatime daTime;
           daTime.Set(min/1000);
           int hourMin = daTime.GetHour();
@@ -1212,16 +1235,7 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
           int hourMax = daTime.GetHour();
           int minuteMax = daTime.GetMinute();
           int secondMax = daTime.GetSecond();
-          /*
-        auto validityMin = getLocalTime(min, "Europe/Paris");
-        auto hourMin = getHour(validityMin);
-        auto minuteMin = getMinute(validityMin);
-        auto secondMin = getSecond(validityMin);
-        auto validityMax = getLocalTime(max, "Europe/Paris");
-        auto hourMax = getHour(validityMax);
-        auto minuteMax = getMinute(validityMax);
-        auto secondMax = getSecond(validityMax);
-           */
+#endif
           std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
         }
       }
@@ -1284,113 +1298,103 @@ void trendAllRuns(const PlotConfig& plotConfig, std::map<int, std::multimap<doub
 void printReport()
 {
   std::cout << "\n\n==================\nSummary report\n==================\n\n";
-  for (auto& [run, plotMap] : badTimeIntervals) {
-    if (plotMap.empty()) {
+  for (auto runNum : prodRunNumbers) {
+    std::cout << runNum << ": ";
+    if (std::find(runNumbers.begin(), runNumbers.end(), runNum) == runNumbers.end())
       continue;
-    }
-   std::cout << "Run " << run << std::endl;
-    // aggregate bad intervals for each plot separately
-    std::map<std::string, std::vector<std::pair<long, long>>> aggregatedIntervalsPerPlot;
-    std::vector<std::pair<long, long>> intervalsToBeAggregated;
-    for (auto& [plotName, intervalVec] : plotMap) {
-      for (auto& [min, max] : intervalVec) {
-        if (aggregatedIntervalsPerPlot.count(plotName) <= 0) {
-          aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
-        } else {
-          long lastMax = aggregatedIntervalsPerPlot[plotName].back().second;
-          if (min <= lastMax) {
-            // if the current interval overlaps or is adjacent with the currently aggregated one, we extend the aggregated interval if needed
-            if (max > lastMax) {
-              aggregatedIntervalsPerPlot[plotName].back().second = max;
-            }
-          } else {
-            // otherwise we initialize a new aggregated interval
+
+    bool isFullyGood = true;
+    for (auto& [run, plotMap] : badTimeIntervals) {
+      if (run != runNum) continue;
+
+      // aggregate bad intervals for each plot separately
+      std::map<std::string, std::vector<std::pair<long, long>>> aggregatedIntervalsPerPlot;
+      std::vector<std::pair<long, long>> intervalsToBeAggregated;
+      for (auto& [plotName, intervalVec] : plotMap) {
+        for (auto& [min, max] : intervalVec) {
+          //std::cout << std::format("Interval for {} min={} max={}", plotName, min, max) << std::endl;
+          if (aggregatedIntervalsPerPlot.count(plotName) <= 0) {
             aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
+          } else {
+            long lastMax = aggregatedIntervalsPerPlot[plotName].back().second;
+            if (min <= lastMax) {
+              // if the current interval overlaps or is adjacent with the currently aggregated one, we extend the aggregated interval if needed
+              if (max > lastMax) {
+                aggregatedIntervalsPerPlot[plotName].back().second = max;
+              }
+            } else {
+              // otherwise we initialize a new aggregated interval
+              aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
+            }
           }
         }
-      }
 
-      for (auto& [min, max] : aggregatedIntervalsPerPlot[plotName]) {
-        intervalsToBeAggregated.push_back(std::make_pair(min, max));
-
-        if (false) {
-          TDatime daTime;
-          daTime.Set(min/1000);
-          int hourMin = daTime.GetHour();
-          int minuteMin = daTime.GetMinute();
-          int secondMin = daTime.GetSecond();
-          daTime.Set(max/1000);
-          int hourMax = daTime.GetHour();
-          int minuteMax = daTime.GetMinute();
-          int secondMax = daTime.GetSecond();
-          /*
-          auto validityMin = getLocalTime(min, "Europe/Paris");
-          auto hourMin = getHour(validityMin);
-          auto minuteMin = getMinute(validityMin);
-          auto secondMin = getSecond(validityMin);
-          auto validityMax = getLocalTime(max, "Europe/Paris");
-          auto hourMax = getHour(validityMax);
-          auto minuteMax = getMinute(validityMax);
-          auto secondMax = getSecond(validityMax);
-          */
-          std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d] for plot \"%s\"\n",
-              min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax, plotName.c_str()).Data();
+        for (auto& [min, max] : aggregatedIntervalsPerPlot[plotName]) {
+          intervalsToBeAggregated.push_back(std::make_pair(min, max));
         }
       }
-    }
 
-    // sort all intervals in ascending order
-    std::sort(intervalsToBeAggregated.begin(), intervalsToBeAggregated.end());
-    // aggregate all intervals together
-    std::set<std::pair<long, long>> aggregatedIntervals;
-    std::pair<long, long> currentInterval{ -1, -1 };
-    for (auto& [min, max] : intervalsToBeAggregated) {
-      if (currentInterval.first < 0) {
-        currentInterval.first = min;
-        currentInterval.second = max;
-        continue;
+      // sort all intervals in ascending order
+      std::sort(intervalsToBeAggregated.begin(), intervalsToBeAggregated.end());
+      // aggregate all intervals together
+      std::set<std::pair<long, long>> aggregatedIntervals;
+      std::pair<long, long> currentInterval{ -1, -1 };
+      for (auto& [min, max] : intervalsToBeAggregated) {
+        if (currentInterval.first < 0) {
+          currentInterval.first = min;
+          currentInterval.second = max;
+          continue;
+        }
+
+        if (min <= currentInterval.second && max >= currentInterval.first) {
+          // the intervals are overlapping, we update the limits if needed
+          if (min < currentInterval.first) currentInterval.first = min;
+          if (max > currentInterval.second) currentInterval.second = max;
+        } else {
+          // the new interval does not overlap with the current one
+          // we insert the current in the set of intervals and we re-initialize it with the new interval
+          aggregatedIntervals.insert(currentInterval);
+          currentInterval.first = min;
+          currentInterval.second = max;
+        }
       }
 
-      if (min <= currentInterval.second && max >= currentInterval.first) {
-        // the intervals are overlapping, we update the limits if needed
-        if (min < currentInterval.first) currentInterval.first = min;
-        if (max > currentInterval.second) currentInterval.second = max;
-      } else {
-        // the new interval does not overlap with the current one
-        // we insert the current in the set of intervals and we re-initialize it with the new interval
+      if (currentInterval.first >= 0) {
+        // as the final step, add the current interval to the set as well
         aggregatedIntervals.insert(currentInterval);
-        currentInterval.first = min;
-        currentInterval.second = max;
+      }
+
+      bool first = true;
+      for (auto& [min, max] : aggregatedIntervals) {
+#ifdef USE_ZONED_TIME
+        auto validityMin = getLocalTime(min);
+        auto hourMin = getHour(validityMin);
+        auto minuteMin = getMinute(validityMin);
+        auto secondMin = getSecond(validityMin);
+        auto validityMax = getLocalTime(max);
+        auto hourMax = getHour(validityMax);
+        auto minuteMax = getMinute(validityMax);
+        auto secondMax = getSecond(validityMax);
+#else
+        TDatime daTime;
+        daTime.Set(min/1000);
+        int hourMin = daTime.GetHour();
+        int minuteMin = daTime.GetMinute();
+        int secondMin = daTime.GetSecond();
+        daTime.Set(max/1000);
+        int hourMax = daTime.GetHour();
+        int minuteMax = daTime.GetMinute();
+        int secondMax = daTime.GetSecond();
+#endif
+        if (first) std::cout << std::endl;
+        std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n",
+            min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+        first = false;
+        isFullyGood = false;
       }
     }
-
-    if (currentInterval.first >= 0) {
-      // as the final step, add the current interval to the set as well
-      aggregatedIntervals.insert(currentInterval);
-    }
-
-    for (auto& [min, max] : aggregatedIntervals) {
-      TDatime daTime;
-      daTime.Set(min/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      int secondMin = daTime.GetSecond();
-      daTime.Set(max/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
-      int secondMax = daTime.GetSecond();
-      /*
-      auto validityMin = getLocalTime(min, "Europe/Paris");
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto secondMin = getSecond(validityMin);
-      auto validityMax = getLocalTime(max, "Europe/Paris");
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-      auto secondMax = getSecond(validityMax);
-      */
-      std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n",
-          min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+    if (isFullyGood) {
+      std::cout << "good" << std::endl;
     }
   }
 }
@@ -1427,9 +1431,14 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
   pass = jRunsConfig.at("pass").get<std::string>();
   beamType = jRunsConfig.at("beamType").get<std::string>();
 
+  // production runs
+  std::vector<int> prodRuns = jRunsConfig.at("productionRuns");
+  for (const auto& prodRun : prodRuns) {
+    prodRunNumbers.push_back(prodRun);
+  }
+
   // input runs
   std::vector<int> inputRuns = jRunsConfig.at("runs");
-  std::vector<int> runNumbers;
   std::vector<int> runNumbersAll;
   for (const auto& inputRun : inputRuns) {
     runNumbers.push_back(inputRun);
