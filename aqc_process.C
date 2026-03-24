@@ -279,11 +279,21 @@ bool splitPlotPath(std::string plotPath, std::array<std::string, 4>& plotPathSpl
 #ifdef USE_ZONED_TIME
 using DateTime = std::pair<std::chrono::year_month_day, std::chrono::hh_mm_ss<std::chrono::milliseconds>>;
 
-DateTime getLocalTime(uint64_t timeStamp, const char* timeZone = "Europe/Paris")
-//DateTime getLocalTime(uint64_t timeStamp, const char* timeZone = "Asia/Tokyo")
+DateTime getCERNTime(uint64_t timeStamp, const char* timeZone = "Europe/Paris")
+//DateTime getCERNTime(uint64_t timeStamp, const char* timeZone = "Asia/Tokyo")
 {
   DateTime result;
-  auto localTime = std::chrono::zoned_time{timeZone, std::chrono::system_clock::time_point{std::chrono::milliseconds{timeStamp}}}.get_local_time();
+  auto cernTime = std::chrono::zoned_time{timeZone, std::chrono::system_clock::time_point{std::chrono::milliseconds{timeStamp}}}.get_local_time();
+  result.first = std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(cernTime)};
+  result.second = std::chrono::hh_mm_ss{std::chrono::floor<std::chrono::milliseconds>(cernTime - std::chrono::floor<std::chrono::days>(cernTime))};
+  return result;
+}
+
+DateTime getLocalTime(uint64_t timeStamp)
+{
+  DateTime result;
+  const auto time_pt_utc{std::chrono::system_clock::time_point{std::chrono::milliseconds{timeStamp}}};
+  auto localTime = std::chrono::current_zone()->to_local(time_pt_utc);
   result.first = std::chrono::year_month_day{std::chrono::floor<std::chrono::days>(localTime)};
   result.second = std::chrono::hh_mm_ss{std::chrono::floor<std::chrono::milliseconds>(localTime - std::chrono::floor<std::chrono::days>(localTime))};
   return result;
@@ -475,13 +485,17 @@ void plotRun(const PlotConfig& plotConfig, int runNumber, std::map<int, std::vec
       else hist->Draw("H same");
       nPlots += 1;
 
+      std::string legendEntryText;
 #ifdef USE_ZONED_TIME
-      auto validityMin = getLocalTime(mo->getValidity().getMin());
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax());
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
+      auto validityMin = getCERNTime(mo->getValidity().getMin());
+      auto validityMax = getCERNTime(mo->getValidity().getMax());
+      auto validityMinLocal = getLocalTime(mo->getValidity().getMin());
+      auto validityMaxLocal = getLocalTime(mo->getValidity().getMax());
+      legendEntryText = TString::Format("%d [CERN %02d:%02d - %02d:%02d] [LOC %02d:%02d - %02d:%02d]", mo->getActivity().mId,
+          getHour(validityMin), getMinute(validityMin),
+          getHour(validityMax), getMinute(validityMax),
+          getHour(validityMinLocal), getMinute(validityMinLocal),
+          getHour(validityMaxLocal), getMinute(validityMaxLocal));
 #else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
@@ -490,8 +504,9 @@ void plotRun(const PlotConfig& plotConfig, int runNumber, std::map<int, std::vec
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
+      legendEntryText = TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax);
 #endif
-      legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
+      legend->AddEntry(hist, legendEntryText.c_str(), "l");
     }
 
     if (nPlots < 1) continue;
@@ -544,13 +559,17 @@ void plotAllRuns(const PlotConfig& plotConfig, std::map<int, std::vector<std::sh
       else hist->Draw((plotConfig.drawOptions + " same").c_str());
       first = false;
 
+      std::string legendEntryText;
 #ifdef USE_ZONED_TIME
-      auto validityMin = getLocalTime(mo->getValidity().getMin());
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax());
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
+      auto validityMin = getCERNTime(mo->getValidity().getMin());
+      auto validityMax = getCERNTime(mo->getValidity().getMax());
+      auto validityMinLocal = getLocalTime(mo->getValidity().getMin());
+      auto validityMaxLocal = getLocalTime(mo->getValidity().getMax());
+      legendEntryText = TString::Format("%d [CERN %02d:%02d - %02d:%02d] [LOC %02d:%02d - %02d:%02d]", mo->getActivity().mId,
+          getHour(validityMin), getMinute(validityMin),
+          getHour(validityMax), getMinute(validityMax),
+          getHour(validityMinLocal), getMinute(validityMinLocal),
+          getHour(validityMaxLocal), getMinute(validityMaxLocal));
 #else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
@@ -559,123 +578,12 @@ void plotAllRuns(const PlotConfig& plotConfig, std::map<int, std::vector<std::sh
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
+      legendEntryText = TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax);
 #endif
-      legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
+      legend->AddEntry(hist, legendEntryText.c_str(), "l");
     }
     legend->Draw();
 
-
-    if (firstPage) c.SaveAs((outputFileName + "(").c_str());
-    else c.SaveAs(outputFileName.c_str());
-
-    firstPage = false;
-  }
-  c.Clear();
-  c.SaveAs((outputFileName + ")").c_str());
-}
-
-void plotReferenceComparisonForAllRuns(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals)
-{
-  double checkRangeMin = plotConfig.checkRangeMin;
-  double checkRangeMax = plotConfig.checkRangeMax;
-  double checkThreshold = plotConfig.checkThreshold;
-  double chekMaxBadBinsFrac = plotConfig.maxBadBinsFrac;
-
-  int cW = 1800;
-  int cH = 600;
-  TCanvas c("c","c",cW,cH);
-  c.SetRightMargin(0.3);
-
-  std::string outputFileName = getPlotOutputFilePrefix(plotConfig) + "-refcomp.pdf";
-
-  bool firstPage = true;
-  for (auto& [index, moVec] : monitorObjectsInRateIntervals) {
-    if (moVec.empty()) continue;
-
-    double referenceRate = rateIntervals[index].second;
-    int refRunNumber = getReferenceRunForRate(referenceRate);
-    std::cout << "TOTO index: " << index << "  rate: " << referenceRate << "  referenceRun: " << refRunNumber << std::endl;
-
-    if (referencePlots.count(index) < 1) continue;
-    auto referenceHist = referencePlots[index];
-    referenceHist->Scale(1.0 / referenceHist->Integral());
-
-    auto legend = new TLegend(0.75,0.1,0.95,0.9);
-
-    int lineColor = 51;
-    bool first = true;
-    for (auto& mo : moVec) {
-      const TH1* hist = dynamic_cast<TH1*>(mo->getObject());
-      //std::cout << "hist: " << hist << std::endl;
-      if (!hist) continue;
-
-      TH1* histRatio = (TH1*)hist->Clone("_Ratio");
-
-      histRatio->Scale(1.0 / histRatio->Integral());
-      histRatio->Divide(referenceHist.get());
-
-      histRatio->SetLineColor(lineColor);
-      lineColor += 1;
-      if (lineColor >= 100) lineColor = 51;
-
-      if (first) {
-        histRatio->SetTitle(TString::Format("%s [%0.1f kHz, %0.1f kHz]", hist->GetTitle(), rateIntervals[index].first, rateIntervals[index].second));
-        histRatio->Draw("H");
-        histRatio->SetMinimum(0.8);
-        histRatio->SetMaximum(1.2);
-      }
-      else histRatio->Draw("H same");
-      first = false;
-
-      // check quality
-      double nBinsChecked = 0;
-      double nBinsBad = 0;
-      for (int bin = 1; bin <= histRatio->GetXaxis()->GetNbins(); bin++) {
-        double xBin = histRatio->GetXaxis()->GetBinCenter(bin);
-        if (checkRangeMin != checkRangeMax) {
-          if (xBin < checkRangeMin || xBin > checkRangeMax) {
-            continue;
-          }
-        }
-
-        nBinsChecked += 1;
-        double ratio = histRatio->GetBinContent(bin);
-        double deviation = std::fabs(ratio - 1.0);
-        if (deviation > checkThreshold) {
-          nBinsBad += 1;
-        }
-      }
-      double fracBad = (nBinsChecked > 0) ? (nBinsBad / nBinsChecked) : 0;
-
-#ifdef USE_ZONED_TIME
-      auto validityMin = getLocalTime(mo->getValidity().getMin());
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax());
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-#else
-      TDatime daTime;
-      daTime.Set(mo->getValidity().getMin()/1000);
-      int hourMin = daTime.GetHour();
-      int minuteMin = daTime.GetMinute();
-      daTime.Set(mo->getValidity().getMax()/1000);
-      int hourMax = daTime.GetHour();
-      int minuteMax = daTime.GetMinute();
-#endif
-      if (fracBad > chekMaxBadBinsFrac) {
-        std::cout << "Bad run: " << TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax).Data() << std::endl;
-      }
-
-      TLegendEntry* lentry = legend->AddEntry(histRatio,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
-      if (mo->getActivity().mId == refRunNumber) {
-        lentry->SetTextColor(kGreen + 2);
-      }
-      if (fracBad > chekMaxBadBinsFrac) {
-        lentry->SetTextColor(kRed);
-      }
-    }
-    legend->Draw();
 
     if (firstPage) c.SaveAs((outputFileName + "(").c_str());
     else c.SaveAs(outputFileName.c_str());
@@ -1123,25 +1031,26 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
 
       first = false;
 
+      std::string legendEntryText;
 #ifdef USE_ZONED_TIME
-      auto validityMin = getLocalTime(mo->getValidity().getMin());
-      auto hourMin = getHour(validityMin);
-      auto minuteMin = getMinute(validityMin);
-      //auto secondMin = getSecond(validityMin);
-      auto validityMax = getLocalTime(mo->getValidity().getMax());
-      auto hourMax = getHour(validityMax);
-      auto minuteMax = getMinute(validityMax);
-      //auto secondMax = getSecond(validityMax);
+      auto validityMin = getCERNTime(mo->getValidity().getMin());
+      auto validityMax = getCERNTime(mo->getValidity().getMax());
+      auto validityMinLocal = getLocalTime(mo->getValidity().getMin());
+      auto validityMaxLocal = getLocalTime(mo->getValidity().getMax());
+      legendEntryText = TString::Format("%d [CERN %02d:%02d - %02d:%02d] [LOC %02d:%02d - %02d:%02d]", mo->getActivity().mId,
+          getHour(validityMin), getMinute(validityMin),
+          getHour(validityMax), getMinute(validityMax),
+          getHour(validityMinLocal), getMinute(validityMinLocal),
+          getHour(validityMaxLocal), getMinute(validityMaxLocal));
 #else
       TDatime daTime;
       daTime.Set(mo->getValidity().getMin()/1000);
       int hourMin = daTime.GetHour();
       int minuteMin = daTime.GetMinute();
-      //int secondMin = daTime.GetSecond();
       daTime.Set(mo->getValidity().getMax()/1000);
       int hourMax = daTime.GetHour();
       int minuteMax = daTime.GetMinute();
-      //int secondMax = daTime.GetSecond();
+      legendEntryText = TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax);
 #endif
       if (fracBad > chekMaxBadBinsFrac) {
         //std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
@@ -1157,12 +1066,13 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
       }
 
       if (mo->getActivity().mId == refRunNumber) {
-        TLegendEntry* lentry = legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
+        TLegendEntry* lentry = legend->AddEntry(hist, legendEntryText.c_str(), "l");
         lentry->SetTextColor(kGreen + 2);
       }
       if (fracBad > chekMaxBadBinsFrac) {
-        TLegendEntry* lentry = legend->AddEntry(hist,TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax),"l");
+        TLegendEntry* lentry = legend->AddEntry(hist, legendEntryText.c_str(), "l");
         lentry->SetTextColor(kRed);
+        lentry->SetTextSize(.025);
       }
     }
 
@@ -1195,7 +1105,8 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
       TLegendEntry *header = (TLegendEntry*)legend->GetListOfPrimitives()->First();
       header->SetTextColor(kGreen + 2);
       header->SetTextSize(.08);
-   }
+    }
+    //legend->SetTextAlign(13);
     legend->Draw();
 
     if (firstPage) canvas.canvas->SaveAs((outputFileName + "(").c_str());
@@ -1217,14 +1128,15 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
         std::cout << "  Bad time intervals for plot \"" << plotName << "\"\n";
         for (auto& [min, max] : intervalVec) {
 #ifdef USE_ZONED_TIME
-          auto validityMin = getLocalTime(min);
-          auto hourMin = getHour(validityMin);
-          auto minuteMin = getMinute(validityMin);
-          auto secondMin = getSecond(validityMin);
-          auto validityMax = getLocalTime(max);
-          auto hourMax = getHour(validityMax);
-          auto minuteMax = getMinute(validityMax);
-          auto secondMax = getSecond(validityMax);
+          auto validityMin = getCERNTime(min);
+          auto validityMax = getCERNTime(max);
+          auto validityMinLocal = getLocalTime(min);
+          auto validityMaxLocal = getLocalTime(max);
+          std::cout << TString::Format("    %ld - %ld [CERN %02d:%02d:%02d - %02d:%02d:%02d] [LOC %02d:%02d:%02d - %02d:%02d:%02d]\n", min, max,
+              getHour(validityMin), getMinute(validityMin), getSecond(validityMin),
+              getHour(validityMax), getMinute(validityMax), getSecond(validityMax),
+              getHour(validityMinLocal), getMinute(validityMinLocal), getSecond(validityMinLocal),
+              getHour(validityMaxLocal), getMinute(validityMaxLocal), getSecond(validityMaxLocal)).Data();
 #else
           TDatime daTime;
           daTime.Set(min/1000);
@@ -1235,8 +1147,8 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
           int hourMax = daTime.GetHour();
           int minuteMax = daTime.GetMinute();
           int secondMax = daTime.GetSecond();
-#endif
           std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+#endif
         }
       }
     }
@@ -1366,15 +1278,17 @@ void printReport()
 
       bool first = true;
       for (auto& [min, max] : aggregatedIntervals) {
+        if (first) std::cout << std::endl;
 #ifdef USE_ZONED_TIME
-        auto validityMin = getLocalTime(min);
-        auto hourMin = getHour(validityMin);
-        auto minuteMin = getMinute(validityMin);
-        auto secondMin = getSecond(validityMin);
-        auto validityMax = getLocalTime(max);
-        auto hourMax = getHour(validityMax);
-        auto minuteMax = getMinute(validityMax);
-        auto secondMax = getSecond(validityMax);
+        auto validityMin = getCERNTime(min);
+        auto validityMax = getCERNTime(max);
+        auto validityMinLocal = getLocalTime(min);
+        auto validityMaxLocal = getLocalTime(max);
+        std::cout << TString::Format("  Bad aggregated interval [%ld - %ld]\n    CERN time:  [%02d:%02d:%02d - %02d:%02d:%02d]\n    Local time: [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max,
+            getHour(validityMin), getMinute(validityMin), getSecond(validityMin),
+            getHour(validityMax), getMinute(validityMax), getSecond(validityMax),
+            getHour(validityMinLocal), getMinute(validityMinLocal), getSecond(validityMinLocal),
+            getHour(validityMaxLocal), getMinute(validityMaxLocal), getSecond(validityMaxLocal)).Data();
 #else
         TDatime daTime;
         daTime.Set(min/1000);
@@ -1385,10 +1299,9 @@ void printReport()
         int hourMax = daTime.GetHour();
         int minuteMax = daTime.GetMinute();
         int secondMax = daTime.GetSecond();
-#endif
-        if (first) std::cout << std::endl;
-        std::cout << TString::Format("  Bad aggregated interval %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n",
+        std::cout << TString::Format("  Bad aggregated interval [%ld - %ld] [%02d:%02d:%02d - %02d:%02d:%02d]\n",
             min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+#endif
         first = false;
         isFullyGood = false;
       }
@@ -1661,8 +1574,6 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
       std::cout << "Plotting bad run " << runNumber << std::endl;
       plotRunsWithRatios(plot, monitorObjectsInRateIntervals, runNumber);
     }
-
-    //plotReferenceComparisonForAllRuns(plot, monitorObjectsInRateIntervals);
   }
 
   for (const auto& plot : trendConfigsVector) {
