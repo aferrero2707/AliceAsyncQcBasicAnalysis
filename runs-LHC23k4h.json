@@ -1,0 +1,21 @@
+{
+  "type": "sim",
+  "year": "2025",
+  "period": "LHC23k4h",
+  "pass": "0",
+  "beamType": "pp",
+  "enable_chunks": "0",
+  "rootFiles": [
+    "MCHTracksTaskQC.root",
+    "MIDTaskQC.root",
+    "MCHMIDTracksTaskQC.root",
+    "MUONTracksMFTTaskQC.root"
+  ],
+  "productionRuns": [
+    535069
+  ],
+  "productionStart": "2023-01-01 00:00:00",
+  "runs": [
+    
+  ]
+}
