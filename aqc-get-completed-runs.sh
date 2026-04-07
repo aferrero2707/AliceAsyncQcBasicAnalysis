@@ -112,6 +112,11 @@ if [ x"$TYPE" = "xsim" ]; then
             fi
             RUNLIST="${RUNLIST}${RUN}"
             FIRST=0
+        else
+            if [ -n "${MISSINGRUNLIST}" ]; then
+                MISSINGRUNLIST="${MISSINGRUNLIST}, "
+            fi
+            MISSINGRUNLIST="${MISSINGRUNLIST}${RUN}"
         fi
         
     done < <(alien_ls "${BASEDIR}/${PASS}" | tr -d "/")
