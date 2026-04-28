@@ -1,15 +1,15 @@
 {
   "type": "data",
   "year": "2026",
-  "period": "LHC26ae",
+  "period": "LHC26ag",
   "pass": "cpass0",
   "beamType": "pp",
   "": "the beam type can be pp or Pb-Pb",
   "enable_chunks": "0",
   "productionRuns": [
-    570733, 570734, 570739, 570760, 570794, 570805, 570822, 570826, 570851, 570863, 570866, 570867, 570869, 570870, 570872
+    571234, 571236, 571237, 571238, 571240, 571252, 571253, 571254, 571268, 571269, 571287, 571288, 571290
   ],
-  "productionStart": "2026-03-05 00:00:00",
+  "productionStart": "2026-03-17 00:00:00",
   "runs": [
   ],
   "referenceRuns": []
