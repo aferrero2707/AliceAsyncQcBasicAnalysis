@@ -1,0 +1,15 @@
+{
+  "year": "2025",
+  "period": "pp25",
+  "pass": "apass1",
+  "beamType": "pp",
+  "periods": [
+    "LHC25ac",
+    "LHC25ah",
+    "LHC25ai",
+    "LHC25am"
+  ],
+  "runs": [
+    567592
+  ]
+}
