@@ -1,0 +1,16 @@
+{
+  "type": "data",
+  "year": "2026",
+  "period": "LHC26ai",
+  "pass": "cpass0",
+  "beamType": "pp",
+  "": "the beam type can be pp or Pb-Pb",
+  "enable_chunks": "0",
+  "productionRuns": [
+    571424, 571438, 571449, 571462, 571473
+  ],
+  "productionStart": "2026-05-01 00:00:00",
+  "runs": [
+  ],
+  "referenceRuns": []
+}
