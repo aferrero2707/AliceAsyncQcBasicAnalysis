@@ -47,6 +47,7 @@ std::map<double, int> referenceRunsMap; //{ {15, 560070}, {29, 560034}, {40, 560
 std::map<int, std::shared_ptr<TH1>> referencePlots;
 
 std::map<int, std::map<std::string, std::set<std::pair<long, long>>>> badTimeIntervals;
+std::map<int, std::map<std::string, std::set<std::pair<long, long>>>> mediumTimeIntervals;
 
 using namespace o2::quality_control::core;
 
@@ -64,7 +65,8 @@ struct PlotConfig
   double checkRangeMax;
   double checkThreshold;
   double checkDeviationNsigma;
-  double maxBadBinsFrac;
+  double maxBadBinsFracBad;
+  double maxBadBinsFracMedium;
   int rebin;
   bool normalize;
 };
@@ -422,7 +424,7 @@ void populateReferencePlots(const std::map<int, std::multimap<double, std::share
 
       double referenceRate = rateIntervals[index].second;
       int refRunNumber = getReferenceRunForRate(referenceRate);
-      std::cout << "Reference run for " << referenceRate << " [" << index << "] is " << refRunNumber << std::endl;
+      //std::cout << "Reference run for " << referenceRate << " [" << index << "] is " << refRunNumber << std::endl;
       if (refRunNumber != runNumber) continue;
 
       // update reference plot for this rate interval
@@ -439,11 +441,11 @@ void populateReferencePlots(const std::map<int, std::multimap<double, std::share
     }
   }
 
-  for (int index = 0; index < rateIntervals.size(); index++) {
-    if (referencePlots.count(index) < 1) {
-      std::cout << "No reference plot for " << rateIntervals[index].second << " [" << index << "]" << std::endl;
-    }
-  }
+  //for (int index = 0; index < rateIntervals.size(); index++) {
+  //  if (referencePlots.count(index) < 1) {
+  //    std::cout << "No reference plot for " << rateIntervals[index].second << " [" << index << "]" << std::endl;
+  //  }
+  //}
 }
 
 void plotRun(const PlotConfig& plotConfig, int runNumber, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals)
@@ -612,18 +614,27 @@ void normalizeHistogram(TH1* hist, double xmin, double xmax)
   hist->Scale(getNormalizationFactor(hist, xmin, xmax));
 }
 
-TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vector<std::shared_ptr<MonitorObject>>& monitorObjects, int index, int targetRun = 0)
+struct HistScore
+{
+  size_t index{ 0 };
+  double score{ 0 };
+};
+
+TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vector<std::shared_ptr<MonitorObject>>& monitorObjects, int index/*, int targetRun = 0*/)
 {
   double checkRangeMin = plotConfig.checkRangeMin;
   double checkRangeMax = plotConfig.checkRangeMax;
   double checkThreshold = plotConfig.checkThreshold;
   double checkDeviationNsigma = plotConfig.checkDeviationNsigma;
-  double chekMaxBadBinsFrac = plotConfig.maxBadBinsFrac;
+  double chekMaxBadBinsFracBad = plotConfig.maxBadBinsFracBad;
+  double chekMaxBadBinsFracMedium = plotConfig.maxBadBinsFracMedium;
   bool logx = plotConfig.logx;
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
   int rebin = plotConfig.rebin;
   bool normalize = plotConfig.normalize;
+
+  std::cout << "Filling average histogram for IR interval " << index /*<< " and target run number " << targetRun*/ << std::endl;
 
   // fill a vector of TH1 histograms with the associated quality flag
   // histograms with quality=false are not included in the averaging
@@ -636,7 +647,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     TH1* hist{ nullptr };
 
     // Convert TProfile plots into histograms to get correct errors for the ratios
-    std::string suffix = std::string("_for_average_") + std::to_string(index) + "_" + std::to_string(targetRun) + "_" + std::to_string(moIndex);
+    std::string suffix = std::string("_for_average_") + std::to_string(index) /*+ "_" + std::to_string(targetRun)*/ + "_" + std::to_string(moIndex);
     if (dynamic_cast<TProfile*>(histTemp)) {
       TProfile* hp = dynamic_cast<TProfile*>(histTemp);
       hist = hp->ProjectionX((std::string(histTemp->GetName()) + "_prof_px" + suffix).c_str());
@@ -662,11 +673,14 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
 
   // Iteratively fill histogram with average of all histograms in the current IR interval
   // The iterative averaging is stopped when the average does not contain any bad plot
+  int iteration = 0;
   TH1* averageHist{ nullptr };
   while (true) {
 
     if (averageHist) delete averageHist;
     averageHist = nullptr;
+
+    iteration += 1;
 
     int nHistograms = 0;
     for (auto [histTemp, flag] : histogramsWithFlag) {
@@ -695,6 +709,8 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     } else {
       averageHist->Scale(1.0 / nHistograms);
     }
+
+    std::vector<HistScore> histScores;
 
     // loop over plots and find, if existing, the Bad one with the worst quality score
     double worstScore = 0;
@@ -735,7 +751,10 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
 
       delete histRatio;
 
-      if (fracBad > chekMaxBadBinsFrac) {
+      if (fracBad > chekMaxBadBinsFracBad) {
+        HistScore histScore{ histIndex, score };
+        histScores.push_back(histScore);
+
         if (score > worstScore) {
           worstScore = score;
           worstPlotIndex = histIndex;
@@ -744,12 +763,36 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     }
 
     //break;
-
-    if (worstPlotIndex >= 0) {
-      histogramsWithFlag[worstPlotIndex].second = false;
-    } else {
+    size_t nHist = histScores.size();
+    if (nHist == 0) {
       break;
     }
+
+    // sort in decreasing score order
+    std::sort(
+        histScores.begin(),
+        histScores.end(),
+        [](const HistScore& s1, const HistScore& s2) -> bool { return (s1.score > s2.score); }
+    );
+
+    double median = (nHist % 2 != 0) ?
+        histScores[nHist / 2].score :
+        (histScores[(nHist - 1) / 2].score + histScores[nHist / 2].score) / 2.f;
+
+    std::cout << "  Histogram averaging iteration " << iteration << " completed" << std::endl;
+    std::cout << std::format("    Scores: size={} first={} last={} median={}", histScores.size(), histScores.front().score, histScores.back().score, median) << std::endl;
+
+    for (auto& histScore : histScores) {
+      if (histScore.score >= median) {
+        histogramsWithFlag[histScore.index].second = false;
+      }
+    }
+
+    //if (worstPlotIndex >= 0) {
+    //  histogramsWithFlag[worstPlotIndex].second = false;
+    //} else {
+    //  break;
+    //}
   }
 
   for (auto [histTemp, flag] : histogramsWithFlag) {
@@ -760,16 +803,22 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     averageHist->Rebin(rebin);
   }
 
+  std::cout << "Average histogram for IR interval " << index /*<< " and target run number " << targetRun*/ << " filled" << std::endl;
+
   return averageHist;
 }
 
-std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals, int targetRun = 0)
+std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig,
+                                 std::map<int, std::vector<std::shared_ptr<MonitorObject>>>& monitorObjectsInRateIntervals,
+                                 std::map<int, TH1*>& averageHistogramsInRateIntervals,
+                                 int targetRun = 0)
 {
   double checkRangeMin = plotConfig.checkRangeMin;
   double checkRangeMax = plotConfig.checkRangeMax;
   double checkThreshold = plotConfig.checkThreshold;
   double checkDeviationNsigma = plotConfig.checkDeviationNsigma;
-  double chekMaxBadBinsFrac = plotConfig.maxBadBinsFrac;
+  double chekMaxBadBinsFracBad = plotConfig.maxBadBinsFracBad;
+  double chekMaxBadBinsFracMedium = plotConfig.maxBadBinsFracMedium;
   bool logx = plotConfig.logx;
   bool logy = plotConfig.logy;
   auto projection = plotConfig.projection;
@@ -838,7 +887,10 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
     //std::cout << "TOTO index: " << index << "  rate: " << referenceRate << "  referenceRun: " << refRunNumber << std::endl;
 
     // fill histogram with average of all histograms in the current IR interval
-    TH1* averageHist = getAverageHistogramForRateInterval(plotConfig, moVec, index, targetRun);
+    if (averageHistogramsInRateIntervals.count(index) == 0) {
+      averageHistogramsInRateIntervals[index] = getAverageHistogramForRateInterval(plotConfig, moVec, index);
+    }
+    TH1* averageHist = averageHistogramsInRateIntervals[index];
 
     // get pointer to the reference histogram, if available
     std::shared_ptr<TH1> referenceHist;
@@ -847,8 +899,8 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
     }
 
     TH1* denominatorHist = referenceHist ? referenceHist.get() : averageHist;
-    std::cout << "referenceHist.get(): " << referenceHist.get() << "  averageHist: " << averageHist
-        << "  denominatorHist: " << denominatorHist << std::endl;
+    //std::cout << "referenceHist.get(): " << referenceHist.get() << "  averageHist: " << averageHist
+    //    << "  denominatorHist: " << denominatorHist << std::endl;
     if (normalize)
       normalizeHistogram(denominatorHist, checkRangeMin, checkRangeMax);
 
@@ -1052,7 +1104,7 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
       int minuteMax = daTime.GetMinute();
       legendEntryText = TString::Format("%d [%02d:%02d - %02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, hourMax, minuteMax);
 #endif
-      if (fracBad > chekMaxBadBinsFrac) {
+      if (fracBad > chekMaxBadBinsFracBad) {
         //std::cout << "Bad time interval for plot \"" << plotConfig.plotName << "\": "
         //    << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
         //    << TString::Format(" - IR: [%0.1f kHz, %0.1f kHz]", rateIntervals[index].first, rateIntervals[index].second)
@@ -1063,15 +1115,30 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
         nBadPlots += 1;
 
         badRuns.insert(mo->getActivity().mId);
+      } else if (fracBad > chekMaxBadBinsFracMedium) {
+        //std::cout << "Medium time interval for plot \"" << plotConfig.plotName << "\": "
+        //    << TString::Format("%d [%02d:%02d:%02d - %02d:%02d:%02d]", mo->getActivity().mId, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data()
+        //    << TString::Format(" - IR: [%0.1f kHz, %0.1f kHz]", rateIntervals[index].first, rateIntervals[index].second)
+        //    << std::endl;
+
+        mediumTimeIntervals[mo->getActivity().mId][plotConfig.plotName].insert(std::make_pair<long, long>(mo->getValidity().getMin(), mo->getValidity().getMax()));
+
+        nBadPlots += 1;
+
+        badRuns.insert(mo->getActivity().mId);
       }
 
       if (mo->getActivity().mId == refRunNumber) {
         TLegendEntry* lentry = legend->AddEntry(hist, legendEntryText.c_str(), "l");
         lentry->SetTextColor(kGreen + 2);
       }
-      if (fracBad > chekMaxBadBinsFrac) {
+      if (fracBad > chekMaxBadBinsFracBad) {
         TLegendEntry* lentry = legend->AddEntry(hist, legendEntryText.c_str(), "l");
         lentry->SetTextColor(kRed);
+        lentry->SetTextSize(.025);
+      } else if (fracBad > chekMaxBadBinsFracMedium) {
+        TLegendEntry* lentry = legend->AddEntry(hist, legendEntryText.c_str(), "l");
+        lentry->SetTextColor(kOrange);
         lentry->SetTextSize(.025);
       }
     }
@@ -1118,7 +1185,8 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
   canvas.canvas->SaveAs((outputFileName + ")").c_str());
 
   if (targetRun == 0) {
-    std::cout << "\n\n==================\nDetailed report\n==================\n";
+    std::cout << "\n\n==================\nDetailed report\n==================\n"
+        <<     "------------------\nBad time intervals\n------------------\n";
     for (auto& [run, plotMap] : badTimeIntervals) {
       if (plotMap.empty()) {
         continue;
@@ -1126,6 +1194,40 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig, std::map<int, std
       std::cout << "\nRun " << run << std::endl;
       for (auto& [plotName, intervalVec] : plotMap) {
         std::cout << "  Bad time intervals for plot \"" << plotName << "\"\n";
+        for (auto& [min, max] : intervalVec) {
+#ifdef USE_ZONED_TIME
+          auto validityMin = getCERNTime(min);
+          auto validityMax = getCERNTime(max);
+          auto validityMinLocal = getLocalTime(min);
+          auto validityMaxLocal = getLocalTime(max);
+          std::cout << TString::Format("    %ld - %ld [CERN %02d:%02d:%02d - %02d:%02d:%02d] [LOC %02d:%02d:%02d - %02d:%02d:%02d]\n", min, max,
+              getHour(validityMin), getMinute(validityMin), getSecond(validityMin),
+              getHour(validityMax), getMinute(validityMax), getSecond(validityMax),
+              getHour(validityMinLocal), getMinute(validityMinLocal), getSecond(validityMinLocal),
+              getHour(validityMaxLocal), getMinute(validityMaxLocal), getSecond(validityMaxLocal)).Data();
+#else
+          TDatime daTime;
+          daTime.Set(min/1000);
+          int hourMin = daTime.GetHour();
+          int minuteMin = daTime.GetMinute();
+          int secondMin = daTime.GetSecond();
+          daTime.Set(max/1000);
+          int hourMax = daTime.GetHour();
+          int minuteMax = daTime.GetMinute();
+          int secondMax = daTime.GetSecond();
+          std::cout << TString::Format("    %ld - %ld [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+#endif
+        }
+      }
+    }
+    std::cout << "\n------------------\nMedium time intervals\n------------------\n";
+    for (auto& [run, plotMap] : mediumTimeIntervals) {
+      if (plotMap.empty()) {
+        continue;
+      }
+      std::cout << "\nRun " << run << std::endl;
+      for (auto& [plotName, intervalVec] : plotMap) {
+        std::cout << "  Medium time intervals for plot \"" << plotName << "\"\n";
         for (auto& [min, max] : intervalVec) {
 #ifdef USE_ZONED_TIME
           auto validityMin = getCERNTime(min);
@@ -1306,6 +1408,96 @@ void printReport()
         isFullyGood = false;
       }
     }
+    for (auto& [run, plotMap] : mediumTimeIntervals) {
+      if (run != runNum) continue;
+
+      // aggregate bad intervals for each plot separately
+      std::map<std::string, std::vector<std::pair<long, long>>> aggregatedIntervalsPerPlot;
+      std::vector<std::pair<long, long>> intervalsToBeAggregated;
+      for (auto& [plotName, intervalVec] : plotMap) {
+        for (auto& [min, max] : intervalVec) {
+          //std::cout << std::format("Interval for {} min={} max={}", plotName, min, max) << std::endl;
+          if (aggregatedIntervalsPerPlot.count(plotName) <= 0) {
+            aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
+          } else {
+            long lastMax = aggregatedIntervalsPerPlot[plotName].back().second;
+            if (min <= lastMax) {
+              // if the current interval overlaps or is adjacent with the currently aggregated one, we extend the aggregated interval if needed
+              if (max > lastMax) {
+                aggregatedIntervalsPerPlot[plotName].back().second = max;
+              }
+            } else {
+              // otherwise we initialize a new aggregated interval
+              aggregatedIntervalsPerPlot[plotName].push_back(std::make_pair(min, max));
+            }
+          }
+        }
+
+        for (auto& [min, max] : aggregatedIntervalsPerPlot[plotName]) {
+          intervalsToBeAggregated.push_back(std::make_pair(min, max));
+        }
+      }
+
+      // sort all intervals in ascending order
+      std::sort(intervalsToBeAggregated.begin(), intervalsToBeAggregated.end());
+      // aggregate all intervals together
+      std::set<std::pair<long, long>> aggregatedIntervals;
+      std::pair<long, long> currentInterval{ -1, -1 };
+      for (auto& [min, max] : intervalsToBeAggregated) {
+        if (currentInterval.first < 0) {
+          currentInterval.first = min;
+          currentInterval.second = max;
+          continue;
+        }
+
+        if (min <= currentInterval.second && max >= currentInterval.first) {
+          // the intervals are overlapping, we update the limits if needed
+          if (min < currentInterval.first) currentInterval.first = min;
+          if (max > currentInterval.second) currentInterval.second = max;
+        } else {
+          // the new interval does not overlap with the current one
+          // we insert the current in the set of intervals and we re-initialize it with the new interval
+          aggregatedIntervals.insert(currentInterval);
+          currentInterval.first = min;
+          currentInterval.second = max;
+        }
+      }
+
+      if (currentInterval.first >= 0) {
+        // as the final step, add the current interval to the set as well
+        aggregatedIntervals.insert(currentInterval);
+      }
+
+      bool first = true;
+      for (auto& [min, max] : aggregatedIntervals) {
+        if (first) std::cout << std::endl;
+#ifdef USE_ZONED_TIME
+        auto validityMin = getCERNTime(min);
+        auto validityMax = getCERNTime(max);
+        auto validityMinLocal = getLocalTime(min);
+        auto validityMaxLocal = getLocalTime(max);
+        std::cout << TString::Format("  Medium aggregated interval [%ld - %ld]\n    CERN time:  [%02d:%02d:%02d - %02d:%02d:%02d]\n    Local time: [%02d:%02d:%02d - %02d:%02d:%02d]\n", min, max,
+            getHour(validityMin), getMinute(validityMin), getSecond(validityMin),
+            getHour(validityMax), getMinute(validityMax), getSecond(validityMax),
+            getHour(validityMinLocal), getMinute(validityMinLocal), getSecond(validityMinLocal),
+            getHour(validityMaxLocal), getMinute(validityMaxLocal), getSecond(validityMaxLocal)).Data();
+#else
+        TDatime daTime;
+        daTime.Set(min/1000);
+        int hourMin = daTime.GetHour();
+        int minuteMin = daTime.GetMinute();
+        int secondMin = daTime.GetSecond();
+        daTime.Set(max/1000);
+        int hourMax = daTime.GetHour();
+        int minuteMax = daTime.GetMinute();
+        int secondMax = daTime.GetSecond();
+        std::cout << TString::Format("  Medium aggregated interval [%ld - %ld] [%02d:%02d:%02d - %02d:%02d:%02d]\n",
+            min, max, hourMin, minuteMin, secondMin, hourMax, minuteMax, secondMax).Data();
+#endif
+        first = false;
+        isFullyGood = false;
+      }
+    }
     if (isFullyGood) {
       std::cout << "good" << std::endl;
     }
@@ -1440,7 +1632,8 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
                         config.value("checkRangeMax", double(0.0)),
                         config.value("checkThreshold", double(0.1)),
                         config.value("checkDeviationNsigma", double(2.0)),
-                        config.value("maxBadBinsFrac", double(0.1)),
+                        config.value("maxBadBinsFracBad", double(0.5)),
+                        config.value("maxBadBinsFracMedium", double(0.1)),
                         config.value("rebin", 1),
                         config.value("normalize", true)
       });
@@ -1493,7 +1686,8 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
                         config.value("checkRangeMax", double(0.0)),
                         config.value("checkThreshold", double(0.1)),
                         config.value("checkDeviationNsigma", double(2.0)),
-                        config.value("maxBadBinsFrac", double(0.1)),
+                        config.value("maxBadBinsFracBad", double(0.5)),
+                        config.value("maxBadBinsFracMedium", double(0.1)),
                         config.value("normalize", true)
       });
     }
@@ -1568,11 +1762,17 @@ void aqc_process(const char* runsConfig, const char* plotsConfig)
     //  plotRun(plot, runNumber, monitorObjectsInRateIntervals);
     //}
 
-    auto badRuns = plotRunsWithRatios(plot, monitorObjectsInRateIntervals);
+    std::map<int, TH1*> averageHistogramsInRateIntervals;
+    auto badRuns = plotRunsWithRatios(plot, monitorObjectsInRateIntervals, averageHistogramsInRateIntervals);
 
     for (auto runNumber : badRuns) {
       std::cout << "Plotting bad run " << runNumber << std::endl;
-      plotRunsWithRatios(plot, monitorObjectsInRateIntervals, runNumber);
+      plotRunsWithRatios(plot, monitorObjectsInRateIntervals, averageHistogramsInRateIntervals, runNumber);
+    }
+
+    // delete the average histograms
+    for (auto& [index, hist] : averageHistogramsInRateIntervals) {
+      delete hist;
     }
   }
 
