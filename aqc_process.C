@@ -675,6 +675,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
   // The iterative averaging is stopped when the average does not contain any bad plot
   int iteration = 0;
   TH1* averageHist{ nullptr };
+  std::cout << "  histogramsWithFlag.size(): " << histogramsWithFlag.size() << std::endl;
   while (true) {
 
     if (averageHist) delete averageHist;
@@ -763,6 +764,11 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     }
 
     //break;
+
+    if (nHistograms == 1) {
+      break;
+    }
+
     size_t nHist = histScores.size();
     if (nHist == 0) {
       break;
@@ -779,13 +785,20 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
         histScores[nHist / 2].score :
         (histScores[(nHist - 1) / 2].score + histScores[nHist / 2].score) / 2.f;
 
-    std::cout << "  Histogram averaging iteration " << iteration << " completed" << std::endl;
+    std::cout << "  Histogram averaging iteration " << iteration << " completed with " << nHistograms << " histograms" << std::endl;
     std::cout << std::format("    Scores: size={} first={} last={} median={}", histScores.size(), histScores.front().score, histScores.back().score, median) << std::endl;
 
+    int nFlagged = 0;
     for (auto& histScore : histScores) {
       if (histScore.score >= median) {
         histogramsWithFlag[histScore.index].second = false;
+        nFlagged += 1;
       }
+    }
+
+    if (nFlagged == nHistograms) {
+      // all remaining histograms have been flagged, keep the one with the best score to avoif having an emtpy average
+      histogramsWithFlag[histScores.back().index].second = true;
     }
 
     //if (worstPlotIndex >= 0) {
@@ -803,7 +816,7 @@ TH1* getAverageHistogramForRateInterval(const PlotConfig& plotConfig, std::vecto
     averageHist->Rebin(rebin);
   }
 
-  std::cout << "Average histogram for IR interval " << index /*<< " and target run number " << targetRun*/ << " filled" << std::endl;
+  std::cout << "Average histogram for IR interval " << index << ": " << averageHist << std::endl;
 
   return averageHist;
 }
@@ -899,8 +912,8 @@ std::set<int> plotRunsWithRatios(const PlotConfig& plotConfig,
     }
 
     TH1* denominatorHist = referenceHist ? referenceHist.get() : averageHist;
-    //std::cout << "referenceHist.get(): " << referenceHist.get() << "  averageHist: " << averageHist
-    //    << "  denominatorHist: " << denominatorHist << std::endl;
+    std::cout << "referenceHist.get(): " << referenceHist.get() << "  averageHist: " << averageHist
+        << "  denominatorHist: " << denominatorHist << std::endl;
     if (normalize)
       normalizeHistogram(denominatorHist, checkRangeMin, checkRangeMax);
 
@@ -1314,8 +1327,10 @@ void printReport()
   std::cout << "\n\n==================\nSummary report\n==================\n\n";
   for (auto runNum : prodRunNumbers) {
     std::cout << runNum << ": ";
-    if (std::find(runNumbers.begin(), runNumbers.end(), runNum) == runNumbers.end())
+    if (std::find(runNumbers.begin(), runNumbers.end(), runNum) == runNumbers.end()) {
+      std::cout << std::endl;
       continue;
+    }
 
     bool isFullyGood = true;
     for (auto& [run, plotMap] : badTimeIntervals) {
