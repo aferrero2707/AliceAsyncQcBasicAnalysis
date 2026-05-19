@@ -1,0 +1,17 @@
+{
+  "type": "data",
+  "year": "2025",
+  "period": "LHC25as",
+  "pass": "apass1_test_validation_DataRec_2026_v5",
+  "beamType": "Pb-Pb",
+  "": "the beam type can be pp or Pb-Pb",
+  "enable_chunks": "0",
+  "productionRuns": [
+    568600
+  ],
+  "productionStart": "2026-01-01 12:00:00",
+  "runs": [
+    568600
+  ],
+  "referenceRuns": []
+}
