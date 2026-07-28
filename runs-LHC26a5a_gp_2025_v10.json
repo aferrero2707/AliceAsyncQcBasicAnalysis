@@ -1,0 +1,21 @@
+{
+  "type": "sim",
+  "year": "2026",
+  "period": "LHC26a5a_gp_2025_v10",
+  "pass": "0",
+  "beamType": "Pb-Pb",
+  "enable_chunks": "0",
+  "rootFiles": [
+    "MCHTracksTaskQC.root",
+    "MIDTaskQC.root",
+    "MCHMIDTracksTaskQC.root",
+    "MUONTracksMFTTaskQC.root"
+  ],
+  "productionRuns": [
+    568486, 568500, 568521, 568522, 568524, 568525, 568526, 568538, 568539, 568568, 568586, 568587, 568600, 568601
+  ],
+  "productionStart": "2026-06-21 00:00:00",
+  "runs": [
+    568500, 568521, 568522, 568524, 568525, 568526, 568539, 568568, 568586, 568600, 568601
+  ]
+}
