@@ -1,0 +1,18 @@
+{
+  "type": "data",
+  "year": "2026",
+  "period": "pp26",
+  "pass": "apass1",
+  "beamType": "pp",
+  "periods": [
+    "LHC26ac",
+    "LHC26ad",
+    "LHC26ae",
+    "LHC26af",
+    "LHC26ag",
+    "LHC26ai"
+  ],
+  "runs": [
+    
+  ]
+}
