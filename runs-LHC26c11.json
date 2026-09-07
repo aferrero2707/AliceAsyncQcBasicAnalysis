@@ -1,0 +1,20 @@
+{
+  "type": "sim",
+  "year": "2026",
+  "period": "LHC26c11",
+  "pass": "0",
+  "beamType": "pp",
+  "enable_chunks": "0",
+  "rootFiles": [
+    "MCHTracksTaskQC.root",
+    "MIDTaskQC.root",
+    "MCHMIDTracksTaskQC.root",
+    "MUONTracksMFTTaskQC.root"
+  ],
+  "productionRuns": [
+    566139, 566159, 566160, 566161, 566188, 566189, 566190, 566191, 566192, 566204, 566224, 566235, 566272, 566286, 566288, 566301, 566312, 566323, 566334, 566339, 566340, 566341, 566372, 566373, 566375, 566377, 566378, 566379, 566394, 566406, 566407, 566418, 566439
+  ],
+  "productionStart": "2026-03-27 00:00:00",
+  "runs": [
+  ]
+}
