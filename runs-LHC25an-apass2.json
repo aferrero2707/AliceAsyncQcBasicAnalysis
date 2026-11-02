@@ -7,11 +7,10 @@
   "": "the beam type can be pp or Pb-Pb",
   "enable_chunks": "0",
   "productionRuns": [
-    568041
+    567905, 567911, 567912, 567927, 567966, 567967, 567986, 568026
   ],
   "productionStart": "2026-10-01 12:00:00",
   "runs": [
-    568041
   ],
   "referenceRuns": []
 }
