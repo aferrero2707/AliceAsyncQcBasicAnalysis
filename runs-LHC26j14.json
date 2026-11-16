@@ -2,7 +2,7 @@
   "type": "sim",
   "year": "2026",
   "period": "LHC26j14",
-  "pass": "0",
+  "pass": "2",
   "beamType": "pp",
   "enable_chunks": "0",
   "rootFiles": [
@@ -14,7 +14,7 @@
   "productionRuns": [
     566139, 566159, 566160, 566161, 566188, 566189, 566190, 566191
   ],
-  "productionStart": "2026-10-20 00:00:00",
+  "productionStart": "2026-11-06 00:00:00",
   "runs": [
   ]
 }
